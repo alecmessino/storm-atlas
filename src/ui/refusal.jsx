@@ -1,0 +1,262 @@
+/* THE FIVE REFUSALS.
+ *
+ * When the archive will not answer, this is what says so. It is not an error surface -- nothing
+ * has gone wrong -- it is the part of the product that makes every number beside it worth
+ * believing. An archive that answers everything is an archive that is guessing somewhere.
+ *
+ * THE DISTINCTION THAT MATTERS MOST IS NOT WHY, IT IS WHETHER THE READER CAN DO ANYTHING.
+ * Three of these dissolve if the reader asks a different question. Two do not, and no cohort
+ * that can be built will make them go away. Presenting the second kind with a suggestion --
+ * "try widening the radius" -- would be a more comfortable lie than refusing outright, because
+ * it sends the reader looking for a number the record does not contain. So the two irreducible
+ * states are drawn in a flat, unactionable grey with a dashed rule and say, in as many words,
+ * that this is a limit of the record.
+ *
+ *   RATE REFUSED    the sample is below the archive's gate. Counts still publish.   RESOLVABLE
+ *   CONDITIONED ON  this variable defined the cohort -- the fifth rule.             RESOLVABLE
+ *   OUT OF SCOPE    the events exist, somewhere this query cannot reach.            RESOLVABLE
+ *   NOT EVALUABLE   no environment record near genesis for these storms.            PARTLY
+ *   BASE RATE ONLY  the WHOLE archive holds too few events for any skill claim.     IRREDUCIBLE
+ *   -- UNKNOWN      the outcome was never recorded. Out of the denominator, counted. IRREDUCIBLE
+ *
+ * OUT OF SCOPE ARRIVED WITH METHODOLOGY 1.1.0 AND IT SPLIT BASE RATE ONLY IN TWO. The gate used
+ * to count events across the whole archive, so every refusal it produced claimed to be a limit
+ * of the record. Measured, exactly one contract is: hawaii:hurricane, at two events. The rest
+ * were limits of the POPULATION THE QUERY ASKED ABOUT -- a Florida cohort was being told its
+ * Hawaii landfall rate was 0.0% [0.0-3.2%] on the strength of eleven Pacific storms it could
+ * never contain. Those are now OUT OF SCOPE, they are resolvable, and they say where the events
+ * actually are. BASE RATE ONLY keeps its sentence, which is once again true.
+ *
+ * Each carries a distinct mark and distinct wording, so which refusal fired is legible without
+ * reading the sentence. check-atlas-dom asserts all five reach the screen and that no two of
+ * them say the same thing.
+ *
+ * THE COLOUR ROLE IS GONE, AND THE MARK IS WHAT REPLACED IT. These states used to be drawn in
+ * three tones -- `--neg`, `--warn`, `--text-2` -- carried on a title, a tinted panel and a
+ * coloured left bar. In the resting instrument that is a second vocabulary: the frame keeps one
+ * ink for what the surface SAYS and reserves the palette for the cartography, so a refusal
+ * printed in a warning hue reads as an error in the argument rather than as part of it. Nothing
+ * was distinguished by the tone that is not still distinguished: the mark, the title and the
+ * remedy kicker each name the state, and the resolvable/irreducible split -- the only one that
+ * decides what a reader can DO -- is drawn as the rule above the block, solid or dashed.
+ */
+
+import React from "react";
+
+/* One definition per state. The UI reads this; it never writes its own copy of a refusal, for
+   the same reason the gaps are reproduced verbatim -- prose written twice drifts.
+ *
+ * `claim` names this state's row in the pipeline's Epistemic Key (docs/app/claims.js). The two
+ * surfaces necessarily hold two vocabularies -- the key is a reader-facing glossary shared with
+ * a pipeline that knows nothing about cohorts -- but the CORRESPONDENCE is data, declared here
+ * once, so scripts/test-atlas-refusals.mjs can prove every state the Atlas can print has a row
+ * a reader can look it up in, and that no row describes a state nothing prints. */
+export const REFUSALS = {
+  RATE_REFUSED: {
+    kind: "RATE_REFUSED",
+    claim: "refused",
+    title: "RATE REFUSED",
+    mark: "⊘",
+    resolvable: "yes",
+    remedy: "A wider cohort would carry a rate: drop a condition, widen the radius, or extend "
+          + "the seasons. The counts below are real either way.",
+  },
+  CONDITIONED_ON: {
+    kind: "CONDITIONED_ON",
+    claim: "cond",
+    title: "CONDITIONED ON",
+    mark: "↺",
+    resolvable: "yes",
+    /* Short on purpose. The engine's own `reason` is rendered above this line and explains the
+       circularity in full; a second paragraph restating it turns the card into a lecture and
+       buries the one thing this line is for -- whether the reader can act. */
+    remedy: "Remove that condition and it becomes an outcome again.",
+    /* Empty on purpose, not missing. The engine's reason for a circular contract ends with
+       "Remove that condition to make this an outcome again", so the line beneath it has nothing
+       left to add except the one thing the reason does NOT say: which of the two kinds of
+       refusal this is. An empty string renders the classification alone. */
+    remedyShort: "",
+  },
+  OUT_OF_SCOPE: {
+    kind: "OUT_OF_SCOPE",
+    claim: "oos",
+    title: "OUT OF SCOPE",
+    mark: "⇱",
+    resolvable: "yes",
+    remedy: "The events exist in this archive, outside the population you asked about. Widen the "
+          + "basin or the era and this contract becomes scoreable — a skill number over a "
+          + "population that does not carry the events would be borrowed from one that does.",
+    /* THE SAME SENTENCE, TWICE, SIX TIMES OVER. The engine writes its own reason for this
+       refusal and that reason ALREADY ENDS with the widening instruction -- so a card carrying
+       both printed "Widen the basin or the era and this contract becomes scoreable; a skill
+       number over a population that does not carry the events would be borrowed from one that
+       does" and then said it again, in the next paragraph, with an em-dash instead of a
+       semicolon. Measured on one rendered panel: twelve occurrences of that clause across six
+       refusals. `remedyShort` is what the line says when the engine has already said the rest;
+       `remedy` still stands alone where there is no engine reason, which is the compact form in
+       a list. Neither is a paraphrase of the other -- the short one is the long one's first
+       sentence, and the part that is dropped is the part already on screen. */
+    remedyShort: "The events exist in this archive, outside the population you asked about.",
+  },
+  NOT_EVALUABLE: {
+    kind: "NOT_EVALUABLE",
+    claim: "notev",
+    title: "NOT EVALUABLE",
+    mark: "⌁",
+    resolvable: "partly",
+    /* TWO REMEDIES, BECAUSE THERE ARE TWO STATES AND ONLY ONE OF THEM IS REACHABLE TODAY.
+     *
+     * This refusal used to carry a single sentence -- "Dropping the environmental condition
+     * restores the cohort" -- and printed it directly beneath the builder's own statement that
+     * NO ENVIRONMENTAL CONDITION IS OFFERED. Twice per page, the surface told the reader to
+     * remove a control that does not exist. That is worse than an unhelpful remedy: a reader
+     * who believes they set a condition they never set does not trust the count either.
+     *
+     * The distinction the two sentences draw is the one that decides what a reader can DO, and
+     * it is the same distinction the brief names:
+     *
+     *   recordLimit   the observations do not exist for these storms. Nothing in the query put
+     *                 them outside the record and nothing in the query brings them back; what a
+     *                 reader CAN do is ask a question the record reaches.
+     *   queryCaused   a condition the reader set is what removed the evidence, so dropping it
+     *                 restores the cohort -- and still cannot restore the observations.
+     *
+     * `remedy` is the record-limit case because that is the only one this build can reach: the
+     * environment is a LENS and not a filter, so no environmental condition can be active. The
+     * second sentence is kept rather than deleted because it becomes the true one the day a
+     * condition is offered, and a remedy written fresh at that point would be a remedy nobody
+     * had checked against this table. `remedyWhen` in the component selects between them; the
+     * surface never writes either. */
+    remedy: "No environmental condition is active, so there is nothing to drop. These storms sit "
+          + "outside the environment record's era and coverage — a cohort inside it can be "
+          + "evaluated, and the observations themselves cannot be recovered.",
+    remedyQueryCaused: "Dropping the environmental condition restores the cohort; it cannot "
+          + "restore the observations.",
+  },
+  BASE_RATE_ONLY: {
+    kind: "BASE_RATE_ONLY",
+    claim: "base",
+    title: "BASE RATE ONLY",
+    mark: "▤",
+    resolvable: "no",
+    remedy: null,
+    irreducible: "The whole archive holds too few of these events for any conditioned claim. "
+               + "No cohort you can build changes that -- the count is the finding.",
+  },
+  UNKNOWN: {
+    kind: "UNKNOWN",
+    claim: "unk",
+    title: "— UNKNOWN",
+    mark: "—",
+    resolvable: "no",
+    remedy: null,
+    irreducible: "Nobody recorded this outcome. These storms are out of every denominator above "
+               + "and counted here instead. An unrecorded outcome is not a zero, and widening "
+               + "the cohort will not measure them retroactively.",
+  },
+};
+
+/**
+ * @param {object} props
+ * @param {string} props.kind        one of REFUSALS
+ * @param {string} [props.detail]    the archive's own reason, reproduced rather than paraphrased
+ * @param {string} [props.subject]   what was refused, e.g. "CATEGORY 3" or "mexico · >=64 kt"
+ * @param {node}   [props.counts]    what the archive DOES publish here -- a refusal is not a blank
+ * @param {string} [props.cause]     "record" (default) or "query" -- WHICH of the refusal's
+ *   remedies is true of this rendering. A refusal that names a condition the reader has not set
+ *   is a refusal that sends them looking for a control that is not there, so the state picks the
+ *   sentence and the call site never writes one.
+ */
+export function Refusal({ kind, detail, subject, counts, compact, onEvidence, cause = "record",
+  detailSummary }) {
+  const r = REFUSALS[kind];
+  if (!r) return null;
+  const hard = r.resolvable === "no";
+  /* WHICH REMEDY, AND HOW MUCH OF IT.
+     `cause` picks between two DIFFERENT remedies -- record limit or query-caused. `remedyShort`
+     picks how much of the chosen one to print: when the engine has supplied its own reason, the
+     parts of the remedy that reason already contains are not repeated. Both decisions are made
+     from state here so that every sentence is still authored in exactly one place. */
+  const full = cause === "query" && r.remedyQueryCaused ? r.remedyQueryCaused : r.remedy;
+  const remedy = detail && r.remedyShort !== undefined && cause !== "query"
+    ? r.remedyShort : full;
+
+  return (
+    /* NO BOX, NO TINT, NO RADIUS, NO COLOURED BAR. A refusal is part of the argument, so it is
+       set the way the argument is set: a rule, a mono kicker, and the sentence in the serif the
+       rest of the instrument reads in. The rule is DASHED when nothing the reader can do will
+       move the refusal -- the one distinction the old panel drew in colour, redrawn in the
+       frame's own material. */
+    <div data-refusal={r.kind}
+      className={`at-ref${hard ? " at-ref-hard" : ""}${compact ? " at-ref-compact" : ""}`}>
+      {/* THE MARK SITS IN THE MARGINAL RULE'S OWN COLUMN, which is what `.at-ref` already is:
+          `grid-template-columns: auto 1fr` with a hairline down the left, the way a journal sets
+          a caveat. This component used to draw its own box beside that grammar instead of
+          joining it — a bordered, rounded, tinted card with a coloured signal bar — so the
+          surface had TWO refusal idioms and the louder one was the one the frame does not own.
+          There is one now. The rule goes DASHED where nothing the reader can build will move the
+          refusal, which is the single distinction the colour was carrying that a reader can
+          act on. */}
+      <span aria-hidden="true" className="at-ref-mark">{r.mark}</span>
+      <div className="at-ref-body">
+        {/* WRAPS AS WHOLE ITEMS. In a 260px rail the three parts of this line -- the status,
+            what it is about, and what the archive DOES publish -- were breaking mid-phrase
+            against each other, so "NOT EVALUABLE · shear · SST · OHC · 123 of 192 evaluable"
+            interleaved into two unreadable columns. Each part now keeps itself whole and moves
+            to the next line instead; the counts still push right when there is room. */}
+        <div className="at-ref-head">
+          <span className="at-ref-title">{r.title}</span>
+          {subject ? <span className="at-ref-subject">{subject}</span> : null}
+          {counts ? <span className="at-ref-counts">{counts}</span> : null}
+        </div>
+
+        {/* THE REASON, AND WHERE IT SITS.
+            By default the archive's own explanation is open, because a refusal a reader cannot
+            interrogate is a refusal they have to take on trust. `detailSummary` makes it a
+            disclosure instead, for the one place the explanation is a hundred words of standing
+            methodology rather than a fact about this cohort -- and even there the status, the
+            subject, the counts and the remedy stay on screen, so what is hidden is the argument
+            and never the refusal. */}
+        {detail ? (
+          detailSummary ? (
+            <details className="at-ref-more">
+              <summary>{detailSummary}</summary>
+              <div className="at-ref-detail">{detail}</div>
+            </details>
+          ) : (
+            <div className="at-ref-detail">{detail}</div>
+          )
+        ) : null}
+
+        {/* THE REFUSAL CARRIES ITS OWN EVIDENCE. A refusal is a claim about the record -- "too
+            few events exist for a skill claim here" -- and a reader is entitled to check it.
+            This links straight to that contract's row in the calibration ledger, where the
+            archive's own backtest says whether the refusal was right. It is the difference
+            between a policy and a finding, and it is also where the reader discovers that the
+            gate misses three of the four contracts it should be catching. */}
+        {onEvidence ? (
+          <button type="button" className="at-ref-link" data-evidence-link onClick={onEvidence}>
+            SEE THE EVIDENCE →
+          </button>
+        ) : null}
+
+        {/* The line that separates a refusal a reader can act on from one nobody can. */}
+        <div className="at-ref-remedy">
+          {hard ? (
+            <>
+              <strong className="at-ref-k">A LIMIT OF THE RECORD.</strong>{" "}
+              {r.irreducible}
+            </>
+          ) : (
+            <>
+              <strong className="at-ref-k">
+                {r.resolvable === "partly" ? "PARTLY IN YOUR HANDS." : "YOU CAN CHANGE THIS."}
+              </strong>{" "}
+              {remedy}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

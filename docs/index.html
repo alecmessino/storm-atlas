@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Storm Atlas</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Historical storm trajectory, genesis, environment and outcome research engine over the Millibar genesis-to-intensity archive. Research-only.">
+<link rel="icon" href="assets/millibar-icon.svg" type="image/svg+xml">
+<!-- The design system. Token paths inside resolve relative to tokens/. -->
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<!-- The pack is the long pole on a cold load. Asking for it during head parsing means the
+     network is busy while the bundle is still being fetched and parsed. -->
+<link rel="preload" href="data/atlas-manifest.json" as="fetch" crossorigin>
+<link rel="preload" href="data/atlas-core-v1.bin.gz" as="fetch" crossorigin>
+<link rel="preload" href="data/atlas-tracks-v1.bin.gz" as="fetch" crossorigin>
+<link rel="preload" href="assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="atlas.css">
+<style>
+/* `min-height`, NOT `height`, AND THE DOCUMENT SCROLLS.
+   Both used to be `height:100%` with `overflow:hidden` on the body, which said: this surface is
+   exactly one screen and nothing may ever be taller. Under that rule everything the instrument
+   could not fit had to scroll inside a column -- which is how the evidence ledger became 3,457px
+   of deck inside a 673px window. The composition puts the complete matrix, the grouped limits
+   and the apparatus BELOW the first band, at page width, so the page is what scrolls. The
+   calibration surface is still `position:fixed; inset:0` and scrolls inside itself, and is
+   unaffected. */
+html,body{margin:0;min-height:100%}
+body{background:#13171c;color:#e6e8eb;font-family:var(--font-sans)}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2b3746}
+/* Tabular figures everywhere. Without them the replay clock and every metric shift by a
+   fraction of a pixel on each tick, which reads as the whole rail vibrating. */
+body{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased}
+/* Leaflet containment, inlined. The stylesheet above is vendored, but if it ever fails to
+   load, absolutely-positioned tiles spill out of the map and across the layout. These are the
+   minimum rules that keep the map inside its box regardless. */
+.leaflet-container{overflow:hidden;position:relative;-webkit-tap-highlight-color:transparent;background:#0f1317;font-family:var(--font-sans)}
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,
+.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+.leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important;width:256px;height:256px;border:0}
+.leaflet-pane{z-index:400}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}
+.leaflet-marker-pane{z-index:600}.leaflet-tooltip-pane{z-index:650}.leaflet-popup-pane{z-index:700}
+.leaflet-control-container{position:absolute;inset:0;z-index:800;pointer-events:none}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:800;pointer-events:none}
+.leaflet-control{pointer-events:auto;clear:both;position:relative}
+.leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+.leaflet-right .leaflet-control{float:right;margin-right:10px}
+.leaflet-top .leaflet-control{margin-top:10px}.leaflet-bottom .leaflet-control{margin-bottom:10px}
+.leaflet-control-zoom a{display:block;width:26px;height:24px;line-height:24px;text-align:center;text-decoration:none}
+/* An unpainted tile used to read as a skeleton grid. It no longer does: the plate's own
+   background IS the ocean, and a graticule is drawn over it from the archive's projection
+   rather than faked with a repeating gradient that lines up with nothing. */
+.atlas-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;color:#7d8fa5;letter-spacing:.5px}
+input[type=range]{height:16px}
+</style>
+<!-- Vendored. This surface ships a precompiled bundle: no in-browser transform. -->
+<script src="vendor/leaflet.js"></script>
+<script src="claims.js"></script>
+</head>
+<body>
+<div id="atlas"><div class="atlas-boot">[ STORM ATLAS · opening the historical archive… ]</div></div>
+<script type="module" src="dist/atlas.js"></script>
+</body></html>

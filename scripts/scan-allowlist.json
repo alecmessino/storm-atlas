@@ -1,0 +1,329 @@
+{
+ "_note": "Every entry is an exact (file, term, enclosing word) the scan may accept. Anything not listed fails.",
+ "allow": [
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "ledgers",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "at-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "--at-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "edge",
+   "reason": "geometric edge of a plate, map, column or polygon"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "edges",
+   "reason": "geometric edge of a plate, map, column or polygon"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "wedged",
+   "reason": "the English word 'wedged' (layout comment)"
+  },
+  {
+   "path": "^docs/index\\.html$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/data/atlas-calibration\\.json$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/data/atlas-calibration\\.json$",
+   "term": "edge",
+   "word": "backtest-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/data/atlas-coastlines-v1\\.bin\\.gz$",
+   "term": "edge",
+   "word": "edge",
+   "reason": "coastline polygon edges (geometry counts and a documented limitation)"
+  },
+  {
+   "path": "^docs/data/atlas-coastlines-v1\\.bin\\.gz$",
+   "term": "edge",
+   "word": "edges",
+   "reason": "coastline polygon edges (geometry counts and a documented limitation)"
+  },
+  {
+   "path": "^docs/data/atlas-coastlines-v1\\.bin\\.gz$",
+   "term": "edge",
+   "word": "boundary_edges",
+   "reason": "coastline polygon edges (geometry counts and a documented limitation)"
+  },
+  {
+   "path": "^docs/data/atlas-coastlines-v1\\.bin\\.gz$",
+   "term": "edge",
+   "word": "shared_edges",
+   "reason": "coastline polygon edges (geometry counts and a documented limitation)"
+  },
+  {
+   "path": "^docs/data/atlas-coastlines-v1\\.bin\\.gz$",
+   "term": "edge",
+   "word": "land_union_edge",
+   "reason": "coastline polygon edges (geometry counts and a documented limitation)"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "_strokeedges",
+   "reason": "canvas method that strokes polygon edges"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "at-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "onledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "data-open-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "calibrationledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
+   "term": "edge",
+   "word": "edges",
+   "reason": "coastline polygon edge counts in the provenance drawer"
+  },
+  {
+   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
+   "term": "edge",
+   "word": "boundary_edges",
+   "reason": "coastline polygon edge counts in the provenance drawer"
+  },
+  {
+   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
+   "term": "edge",
+   "word": "shared_edges",
+   "reason": "coastline polygon edge counts in the provenance drawer"
+  },
+  {
+   "path": "^docs/dist/chunk-OFQ3ZGWN\\.js$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
+   "term": "edge",
+   "word": "calibrationledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
+   "term": "edge",
+   "word": "data-ledger-scope",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/vendor/leaflet\\.js$",
+   "term": "edge",
+   "word": "edge",
+   "reason": "Leaflet 1.9.4 browser detection for Microsoft Edge (b.edge)"
+  },
+  {
+   "path": "^docs/vendor/leaflet\\.js$",
+   "term": "edge",
+   "word": "_getedgeintersection",
+   "reason": "Leaflet 1.9.4 polygon clipping routine"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "edge",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "edges",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "edge-case",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "hedge",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "acknowledged",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "at-ledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "--at-ledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "_strokeedges",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "boundary_edges",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "shared_edges",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "calibrationledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "data-ledger-scope",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "data-open-ledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "ledgeranchor",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "ledgerboot",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "ledgererror",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "onledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "openledger",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^(src|scripts)/",
+   "term": "edge",
+   "word": "setledgeranchor",
+   "reason": "English/geometry edge or the Atlas's own calibration ledger, in source and gates"
+  },
+  {
+   "path": "^scripts/(lib/recon\\.mjs|test-recon\\.mjs)$",
+   "term": "outbound",
+   "word": "outbound",
+   "reason": "reconnaissance aircraft outbound flight leg (VDM field)"
+  },
+  {
+   "path": "^scripts/(lib/recon\\.mjs|test-recon\\.mjs)$",
+   "term": "outbound",
+   "word": "surfaceoutboundkt",
+   "reason": "reconnaissance aircraft outbound flight leg (VDM field)"
+  },
+  {
+   "path": "^scripts/(lib/recon\\.mjs|test-recon\\.mjs)$",
+   "term": "outbound",
+   "word": "flightoutbound",
+   "reason": "reconnaissance aircraft outbound flight leg (VDM field)"
+  },
+  {
+   "path": "^(src/engine/calibration\\.js|scripts/check-atlas-dom\\.mjs)$",
+   "term": "market",
+   "word": "marketing",
+   "reason": "English 'marketing' in a comment about honest calibration pages"
+  }
+ ]
+}

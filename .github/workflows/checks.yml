@@ -1,0 +1,57 @@
+name: Checks
+
+# The Atlas gates, run in the layout they were written against (scripts/stage.sh), plus the
+# publication gates over the site and the whole repository.
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Publication gates (site and repository)
+        run: |
+          node scripts/test-public-schema.mjs --self-test
+          node scripts/test-public-schema.mjs
+          node scripts/scan-public.mjs --self-test
+          node scripts/scan-public.mjs
+          node scripts/scan-public.mjs --repo
+      - name: Stage (docs/ + src/ in the gate layout) and install the pinned toolchain
+        run: bash scripts/stage.sh
+      - name: Install Chromium
+        working-directory: stage
+        run: npx playwright install --with-deps chromium
+      - name: Node gates
+        working-directory: stage
+        run: |
+          node scripts/test-atcf.mjs
+          node scripts/test-recon.mjs
+          node scripts/test-ships.mjs
+          node scripts/test-atlas-build.mjs
+          node scripts/test-atlas-live.mjs
+          node scripts/test-atlas-live-boundary.mjs
+          node scripts/test-atlas-forward.mjs
+          node scripts/test-atlas-refusals.mjs
+      - name: Browser gates
+        working-directory: stage
+        run: |
+          node scripts/check-atlas-dom.mjs --require-browser
+          node scripts/check-atlas-live-dom.mjs --require-browser
+          node scripts/check-atlas-forward-dom.mjs --self-test --require-browser
+          node scripts/check-atlas-states.mjs --require-browser
+          node scripts/check-atlas-a11y.mjs --require-browser
+          node scripts/check-atlas-instrument.mjs --require-browser

@@ -1,0 +1,116 @@
+{
+  "_note": "PINNED OFFICIAL FORECAST for the Polo acceptance case. Extracted from docs/data/latest.json -- the forecast payload -- so scripts/test-atlas-forward.mjs runs offline and says the same thing in five years. A gate that fetched the live advisory would go green the day NHC revised it and tell nobody.",
+  "source": "NHC official forecast, via docs/data/latest.json",
+  "latest_json_generated_at": "2026-09-21T03:36:15.434Z",
+  "atcf_id": "EP172026",
+  "name": "Polo",
+  "trackPoints": [
+    {
+      "at": [
+        15.1,
+        -104.6
+      ],
+      "hr": 0,
+      "validZ": "2026-09-21T03:00:00.000Z",
+      "kt": 35,
+      "gustKt": 45,
+      "ktFrom": "forecast advisory"
+    },
+    {
+      "at": [
+        15.4,
+        -103.8
+      ],
+      "hr": 9,
+      "validZ": "2026-09-21T12:00:00.000Z",
+      "kt": 45,
+      "gustKt": 55,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        15.4,
+        -103.1
+      ],
+      "hr": 21,
+      "validZ": "2026-09-22T00:00:00.000Z",
+      "kt": 60,
+      "gustKt": 75,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        15.2,
+        -102.4
+      ],
+      "hr": 33,
+      "validZ": "2026-09-22T12:00:00.000Z",
+      "kt": 80,
+      "gustKt": 100,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        15.5,
+        -102.4
+      ],
+      "hr": 45,
+      "validZ": "2026-09-23T00:00:00.000Z",
+      "kt": 95,
+      "gustKt": 115,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        16,
+        -103
+      ],
+      "hr": 57,
+      "validZ": "2026-09-23T12:00:00.000Z",
+      "kt": 110,
+      "gustKt": 135,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        16.7,
+        -103.7
+      ],
+      "hr": 69,
+      "validZ": "2026-09-24T00:00:00.000Z",
+      "kt": 115,
+      "gustKt": 140,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        18.2,
+        -106
+      ],
+      "hr": 93,
+      "validZ": "2026-09-25T00:00:00.000Z",
+      "kt": 115,
+      "gustKt": 140,
+      "ktFrom": null
+    },
+    {
+      "at": [
+        19.5,
+        -109.5
+      ],
+      "hr": 117,
+      "validZ": "2026-09-26T00:00:00.000Z",
+      "kt": 115,
+      "gustKt": 140,
+      "ktFrom": null
+    }
+  ],
+  "derived_genesis": {
+    "t": "2026-09-20T18:00:00.000Z",
+    "lat": 14.5,
+    "lon": -105.1,
+    "stage": "TD",
+    "_note": "from operationalLifecycle over the b-deck fixture bdeck-ep172026.dat"
+  },
+  "live_artifact_generated_at": "2026-09-21T03:36:15.434Z"
+}

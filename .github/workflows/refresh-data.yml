@@ -1,0 +1,119 @@
+name: Refresh Storm Atlas live data
+
+# Refreshes the two live files the Atlas reads (docs/data/atlas-live-v1.json and
+# docs/data/latest.json) every 10 minutes and commits them; GitHub Pages serves the result.
+#
+# CADENCE. A cron fires ONCE an hour and the job loops internally, refreshing every 10 minutes.
+# GitHub throttles high-frequency schedules hard: a */15 cron was measured delivering a ~106 min
+# median. A scheduled event is delivered when NOTHING is running and dropped when something is,
+# so the loop is 45 minutes against an hourly cron, leaving ~15 minutes idle for the next event
+# to land in. Longer loops swallow their own successors.
+#
+# EVERY TICK IS GATED. A tick's output is committed only if it passes the public-schema
+# whitelist (scripts/test-public-schema.mjs) and the forbidden-string scan
+# (scripts/scan-public.mjs). A tick that fails is discarded, the last good files stay live,
+# the loop keeps going, and the run ends red so somebody looks.
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main]          # a code push takes over at once; the bot's own commits use the
+                              # repository token and do not trigger workflows.
+
+# Only a push cancels the run in flight. A scheduled run queues behind a running loop instead of
+# cancelling it (cancelling a healthy loop produced 28-77 min gaps at hour boundaries).
+concurrency:
+  group: atlas-refresh
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Parser tests (the decks, recon and SHIPS parsers the refresh runs)
+        run: |
+          node scripts/test-atcf.mjs
+          node scripts/test-recon.mjs
+          node scripts/test-ships.mjs
+
+      - name: Publication gates prove themselves before they guard anything
+        run: |
+          node scripts/test-public-schema.mjs --self-test
+          node scripts/scan-public.mjs --self-test
+
+      - name: Refresh loop (~45 min, 10-min cadence, every tick gated)
+        id: loop
+        run: |
+          set -u
+          git config user.name  "storm-atlas-data-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          END=$(( $(date +%s) + 45*60 ))
+          TICK=0
+          GATE_FAILED=0
+          while :; do
+            TICK=$((TICK+1))
+            echo "::group::tick $TICK — $(date -u +%H:%MZ)"
+            node scripts/refresh-atlas.mjs || echo "refresh failed this tick — keeping the last good files"
+            if node scripts/test-public-schema.mjs && node scripts/scan-public.mjs; then
+              git add docs/data/atlas-live-v1.json docs/data/latest.json
+              if git diff --cached --quiet; then
+                echo "No data changes this tick."
+              else
+                git commit -m "data: refresh $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+                for i in 1 2 3 4; do
+                  git push && break || { echo "push failed, retry $i"; sleep $((2 ** i)); git pull --rebase --autostash || true; }
+                done
+              fi
+            else
+              echo "::error::tick $TICK failed the publication gates; discarding its output"
+              git checkout -- docs/data
+              GATE_FAILED=1
+            fi
+            echo "::endgroup::"
+            NOW=$(date +%s)
+            [ "$NOW" -ge "$END" ] && break
+            REMAIN=$(( END - NOW ))
+            if [ "$REMAIN" -lt 600 ]; then sleep "$REMAIN"; else sleep 600; fi
+          done
+          exit $GATE_FAILED
+
+      # CHAINED SUCCESSOR. GitHub's hourly cron proved unreliable here (3 deliveries in ~14 h on
+      # 24 Sep), so each finished loop starts the next run itself. The repository GITHUB_TOKEN
+      # cannot trigger workflow runs (the API returns 204 and nothing starts), so this needs a
+      # fine-grained token with Actions read/write on this repository, stored as the secret
+      # ATLAS_DISPATCH_TOKEN. Without it the step is skipped and the cron remains the only driver.
+      # It runs after a gate failure too (the loop already discarded that tick's output; the run
+      # stays red), but only if the loop actually ran, so a run that fails its pre-flight tests
+      # cannot spin up successors in a tight loop. The successor queues behind this run in the
+      # concurrency group and starts when this one ends.
+      - name: Dispatch the successor run (needs ATLAS_DISPATCH_TOKEN)
+        if: ${{ !cancelled() && steps.loop.outcome != 'skipped' }}
+        env:
+          PAT: ${{ secrets.ATLAS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "${PAT}" ]; then
+            echo "::notice::No ATLAS_DISPATCH_TOKEN; relying on the hourly cron."
+            exit 0
+          fi
+          CODE=$(curl -sS -o /tmp/dispatch.out -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/refresh-data.yml/dispatches" \
+            -d '{"ref":"main"}')
+          echo "dispatch http=${CODE}"
+          if [ "${CODE}" != "204" ]; then
+            cat /tmp/dispatch.out
+            echo "::error::successor dispatch failed (http ${CODE}); the chain has stopped and only the cron remains"
+            exit 1
+          fi

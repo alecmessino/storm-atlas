@@ -1,0 +1,29 @@
+name: Verify live site
+
+# Checks what visitors actually get from GitHub Pages: the served build matches this commit,
+# the live data is fresh and schema-clean, nothing forbidden is served, and the page boots with
+# no errors and no off-site requests. Read-only: it commits nothing.
+
+on:
+  schedule:
+    - cron: "37 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright
+        run: |
+          npm i --silent --no-fund --no-audit --no-save --no-package-lock playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Verify https://alecmessino.github.io/storm-atlas/
+        run: node scripts/verify-live.mjs --wait-min 12 --max-age-min 90
