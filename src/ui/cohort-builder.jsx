@@ -35,7 +35,6 @@ import React from "react";
 import { INTENSITY_FILTERS, LANDFALL_FILTERS } from "../engine/query.js";
 
 import { Chip, Head, MONO, Row, claimText, CATEGORY_INK } from "./kit.jsx";
-import { ActiveSystems } from "./active-systems.jsx";
 import { Refusal } from "./refusal.jsx";
 
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -50,9 +49,7 @@ const ENV_FALLBACK = { storms_any_source: null, storms_total: null };
 
 export function CohortBuilder({
   archive, cohort, setCohort, result, preview, sentence, conditions,
-  layers, setLayers, bounds, onReset, mode, setMode,
-  timeline, envCoverage,
-  activeSystems, liveGeneratedAt, launchedSystem, onLaunchSystem,
+  bounds, onReset, envCoverage, focusSection = null,
 }) {
   const total = archive.manifest.counts.storms;
   const s = cohort;
@@ -91,8 +88,28 @@ export function CohortBuilder({
   const ghostKeys = Object.keys(ghosts).filter((k) => !conditions.some((c) => c.key === k));
   const env = (archive.manifest.env_coverage || ENV_FALLBACK);
 
+  /* OPENED AT A SECTION, WHEN A READER ASKED FOR ONE. "+ months" on the question line opens this
+     sheet scrolled to the month strip, marked, rather than at its top with the reader left to
+     find it under the conditions they already have. */
+  const rootRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!focusSection || !rootRef.current) return undefined;
+    const el = rootRef.current.querySelector(`[data-section="${focusSection}"]`);
+    if (!el) return undefined;
+    /* THE SHEET SCROLLS, THE PAGE DOES NOT. scrollIntoView moves every scrolling ancestor, the
+       window included, and took the question off the top of the screen to show a month strip. */
+    const box = el.closest(".at-sheet-body");
+    if (box) box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+    el.setAttribute("data-section-focus", "");
+    const next = el.nextElementSibling;
+    const first = next && (next.matches("button,input") ? next : next.querySelector("button,input"));
+    if (first) first.focus({ preventScroll: true });
+    const t = setTimeout(() => el.removeAttribute("data-section-focus"), 1600);
+    return () => clearTimeout(t);
+  }, [focusSection]);
+
   return (
-    <div style={{ padding: "var(--sp-5) var(--sp-6) var(--sp-8)" }}>
+    <div ref={rootRef} style={{ padding: "var(--sp-5) var(--sp-6) var(--sp-8)" }}>
       {/* ---- THE QUESTION ---------------------------------------------------------------- */}
       <Head right={<button type="button" onClick={onReset} style={RESET_BTN}>RESET</button>}>
         THE QUESTION
@@ -116,39 +133,6 @@ export function CohortBuilder({
         : <span style={{ ...MONO, color: "var(--neg)" }}>
             BELOW SAMPLE · {result.n_cases} &lt; {result.min_sample}</span>} />
       <SilentExclusions excluded={result.excluded} total={total} kept={result.kept} />
-
-      {/* The mode switch stays at the top rather than under the disclosure below: replaying the
-          record is a way of reading the cohort, not a drawing preference, and burying it would
-          hide the archive's own clock behind a triangle. */}
-      <div style={{ display: "flex", gap: 4, marginTop: "var(--sp-4)" }}>
-        <Chip chipKey="mode-explore" active={mode === "explore"}
-          onClick={() => setMode("explore")}>EXPLORE</Chip>
-        <Chip chipKey="mode-replay" active={mode === "replay"}
-          onClick={() => setMode("replay")}>REPLAY</Chip>
-        <span style={{ ...MONO, fontSize: "var(--fs-mono-xs)", color: "var(--text-2)",
-          alignSelf: "center", lineHeight: "var(--lh-body)" }}>
-          {mode === "replay"
-            ? (timeline && timeline.n
-              ? `${timeline.n.toLocaleString()} storms unfold in order`
-              : "no storms in this cohort")
-            : "the record as a finished map"}
-        </span>
-      </div>
-
-      {/* ---- THE ACTIVE SYSTEM LAUNCHER -------------------------------------------------
-          DIRECTLY UNDER THE QUESTION, AND ABOVE THE CONDITION STACK, because it is an ENTRY
-          POINT rather than a condition. A reader opening this sheet on a live storm has not come
-          to edit the question they have; they have come to ask a new one about a system that is
-          on the water right now, and the control for that must be reachable without scrolling
-          past a stack of conditions the click is going to discard anyway.
-
-          It renders nothing when the operational layer is absent or empty, so the archive opens
-          and reads identically without it -- which is the same fail-open rule `loadLive` follows
-          and the reason a broken live file cannot leave a hole here. */}
-      {activeSystems && activeSystems.length && onLaunchSystem ? (
-        <ActiveSystems systems={activeSystems} generatedAt={liveGeneratedAt}
-          currentId={launchedSystem} onLaunch={onLaunchSystem} />
-      ) : null}
 
       {/* ---- THE CONDITION STACK --------------------------------------------------------- */}
       {conditions.length || ghostKeys.length ? (
@@ -177,7 +161,7 @@ export function CohortBuilder({
 
       {/* ---- GENESIS --------------------------------------------------------------------- */}
       <Head>1 · GENESIS</Head>
-      <SubLabel>WHERE IT FORMED</SubLabel>
+      <SubLabel section="where">WHERE IT FORMED</SubLabel>
       {s.where ? (
         <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
           <span style={{ ...MONO, fontSize: "var(--fs-mono-xs)", color: "var(--text-2)" }}>
@@ -195,7 +179,7 @@ export function CohortBuilder({
         </div>
       )}
 
-      <SubLabel>WHEN — SEASON</SubLabel>
+      <SubLabel section="season">WHEN — SEASON</SubLabel>
       <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center" }}>
         <YearBox label="from" value={s.seasonFrom} bounds={bounds}
           onChange={(v) => set({ seasonFrom: v })} />
@@ -216,7 +200,7 @@ export function CohortBuilder({
         ))}
       </div>
 
-      <SubLabel>WHEN — GENESIS MONTH</SubLabel>
+      <SubLabel section="months">WHEN — GENESIS MONTH</SubLabel>
       <div style={{ display: "flex", gap: 3 }}>
         {MONTHS.map((m, i) => {
           const on = !!(s.months && s.months.includes(i + 1));
@@ -250,7 +234,7 @@ export function CohortBuilder({
       {preview ? <Basis n={preview.basisOf.months} cohort={result.kept}
         what="the month" /> : null}
 
-      <SubLabel>WHERE — BASIN</SubLabel>
+      <SubLabel section="basin">WHERE — BASIN</SubLabel>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         <Chip chipKey="basin-all" active={!s.basins} onClick={() => set({ basins: null })}>ALL</Chip>
         {(archive.storms.col("basin").dictionary || []).map((b) => (
@@ -274,7 +258,7 @@ export function CohortBuilder({
            zone, which is right: it is antecedent to every outcome below and it defines no
            outcome, so it makes nothing circular. */}
       <Head>2 · TRAJECTORY</Head>
-      <SubLabel>EVER ENTERED</SubLabel>
+      <SubLabel section="entered">EVER ENTERED</SubLabel>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         {/* Only the subbasins the PACK actually records. A cohort count of zero is an answer --
             none of these storms went there -- but a code the archive never sets for any storm
@@ -382,7 +366,7 @@ export function CohortBuilder({
       </div>
 
       <Head>3 · OUTCOME-SIDE CONDITIONS</Head>
-      <SubLabel>PEAK INTENSITY</SubLabel>
+      <SubLabel section="intensity">PEAK INTENSITY</SubLabel>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         {INTENSITY_FILTERS.map((x) => (
           <Chip key={x.key} chipKey={`intensity-${x.key}`} active={s.intensity === x.key}
@@ -425,7 +409,7 @@ export function CohortBuilder({
         </div>
       ) : null}
 
-      <SubLabel>LANDFALL</SubLabel>
+      <SubLabel section="landfall">LANDFALL</SubLabel>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         <Chip chipKey="landfall-none" active={s.landfall === null}
           onClick={() => set({ landfall: null })}>NO FILTER</Chip>
@@ -445,7 +429,7 @@ export function CohortBuilder({
         what="the landfall region" /> : null}
 
       {/* ---- SCOPE ----------------------------------------------------------------------- */}
-      <Head>4 · SCOPE OF THE RECORD</Head>
+      <div data-section="scope" className="at-bsec"><Head>4 · SCOPE OF THE RECORD</Head></div>
       <Toggle label="NAMED STORMS ONLY" on={s.namedOnly}
         onChange={(v) => set({ namedOnly: v })}
         note="A property of the record rather than of the storm, so it is neither a genesis
@@ -468,28 +452,6 @@ export function CohortBuilder({
             : null}
         </>} />
 
-      {/* ---- HOW IT IS DRAWN ------------------------------------------------------------- */}
-      <details data-drawn style={{ marginTop: "var(--sp-6)" }}>
-        <summary style={{ ...MONO, fontSize: "var(--fs-mono-xs)", color: "var(--text-2)",
-          cursor: "pointer", letterSpacing: "var(--track-label)" }}>
-          ▸ HOW IT IS DRAWN
-        </summary>
-
-        {/* THE DENSITY SURFACES ARE NOT HERE ANY MORE. Pathway counts / Genesis counts / Tracks
-            is the plate's own mode control, on the plate head: it changes what is DRAWN and
-            nothing about the question, and a map-dependent control belongs on the map. The
-            registered claims that named the two surfaces travel with them -- see PlateModes in
-            map.jsx. */}
-        <SubLabel>LAYERS</SubLabel>
-        <Toggle label="COLOUR BY INTENSITY" on={layers.colorBy === "intensity"}
-          onChange={(v) => setLayers({ ...layers, colorBy: v ? "intensity" : "uniform" })}
-          note="Each segment takes the Saffir-Simpson class of the fix it leaves. Fixes with no
-                recorded wind are drawn outside the ramp." />
-        <Toggle label="GENESIS POINTS" on={layers.genesis}
-          onChange={(v) => setLayers({ ...layers, genesis: v })} />
-        <Toggle label="LANDFALLS" on={layers.landfalls}
-          onChange={(v) => setLayers({ ...layers, landfalls: v })} />
-      </details>
     </div>
   );
 }
@@ -597,9 +559,10 @@ function ZoneLabel({ children, outcome }) {
   );
 }
 
-function SubLabel({ children }) {
+function SubLabel({ children, section }) {
   return (
-    <div style={{ ...MONO, fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--track-label)",
+    <div data-section={section || undefined} className={section ? "at-bsec" : undefined}
+      style={{ ...MONO, fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--track-label)",
       color: "var(--text-2)", margin: "var(--sp-4) 0 var(--sp-2)" }}>{children}</div>
   );
 }
@@ -702,18 +665,40 @@ const LINK_BTN = {
   cursor: "pointer", font: "inherit", textDecoration: "underline",
 };
 
-function YearBox({ label, value, bounds, onChange }) {
+/* A DRAFT, COMMITTED ON BLUR OR ENTER, AND ONLY AS A YEAR.
+ *
+ * The box committed every keystroke, and `normalise` swaps bounds when from > to -- so typing
+ * 2025 into "to" over a 1971 floor produced s0=2 and s1=1971025, and "19" in "from" silenced
+ * the pre-1971 warning while every pre-1971 storm stayed in the cohort. The draft is local
+ * until it is a four-digit year inside the archive's bounds; anything else reverts on blur. */
+export function YearBox({ label, value, bounds, onChange }) {
+  const [draft, setDraft] = React.useState(value === null ? "" : String(value));
+  const focused = React.useRef(false);
+  React.useEffect(() => {
+    if (!focused.current) setDraft(value === null ? "" : String(value));
+  }, [value]);
+  const commit = () => {
+    const t = draft.trim();
+    if (t === "") { if (value !== null) onChange(null); return; }
+    const v = Number(t);
+    if (/^\d{4}$/.test(t) && v >= bounds[0] && v <= bounds[1]) {
+      if (v !== value) onChange(v);
+    } else {
+      setDraft(value === null ? "" : String(value));
+    }
+  };
   return (
     <label style={{ flex: 1, minWidth: 0 }}>
       <span style={{ ...MONO, fontSize: "var(--fs-mono-xs)", color: "var(--text-2)",
         display: "block", marginBottom: 2 }}>{label}</span>
-      <input type="number" min={bounds[0]} max={bounds[1]}
-        value={value === null ? "" : value}
+      <input type="text" inputMode="numeric" maxLength={4} data-year-box={label}
+        aria-label={`season ${label}, ${bounds[0]}–${bounds[1]}`}
+        value={draft}
         placeholder={String(label === "from" ? bounds[0] : bounds[1])}
-        onChange={(e) => {
-          const v = e.target.value === "" ? null : Number(e.target.value);
-          onChange(v === null || Number.isNaN(v) ? null : v);
-        }}
+        onFocus={() => { focused.current = true; }}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+        onBlur={() => { focused.current = false; commit(); }}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
         style={{
           ...MONO, width: "100%", fontSize: "var(--fs-mono-sm)", padding: "5px 7px",
           background: "var(--surface-sunken)", color: "var(--text-1)",
@@ -726,7 +711,7 @@ function YearBox({ label, value, bounds, onChange }) {
 function Toggle({ label, on, onChange, note }) {
   return (
     <div style={{ padding: "var(--sp-2) 0" }}>
-      <button type="button" onClick={() => onChange(!on)} style={{
+      <button type="button" aria-pressed={on ? "true" : "false"} onClick={() => onChange(!on)} style={{
         display: "flex", alignItems: "center", gap: "var(--sp-3)", width: "100%",
         background: "transparent", border: 0, padding: 0, cursor: "pointer", textAlign: "left",
       }}>

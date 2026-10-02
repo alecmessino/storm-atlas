@@ -47,8 +47,8 @@ export const SelectionLayer = AtlasLayer.extend({
        the replay cursor has already traversed at 2.8. Because this layer reveals progressively
        -- nothing beyond the cursor is drawn at all -- the heavier weight is simply what is on
        screen during a replay, and the lighter one is the finished track at rest. */
-    width: 2.0,
-    traversedWidth: 2.8,
+    width: 2.6,
+    traversedWidth: 3.2,
   },
 
   setArchive(archive, world) {
@@ -143,13 +143,34 @@ export const SelectionLayer = AtlasLayer.extend({
       ctx.restore();
     }
 
-    // 2. the storm proper, coloured by the intensity at the fix each segment leaves
+    // 2a. A DARK CASING UNDER THE WHOLE STORM, so the subject separates from a dense population
+    //     and a density surface of the same hues -- the line reads as one object, not as one
+    //     more track that happens to be brighter.
+    ctx.save();
+    ctx.strokeStyle = "#04070c";
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = ctx.lineWidth + 3.2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    {
+      let moved = false;
+      for (let k = start; k < Math.min(limit, end - 1); k++) {
+        if (hasGenesis && t[k + 1] <= genesisMin) continue;
+        if (!moved) { ctx.moveTo(X(k), Y(k)); moved = true; }
+        ctx.lineTo(X(k + 1), Y(k + 1));
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 2b. the storm proper, coloured by the intensity at the fix each segment leaves
     for (const interpolated of [false, true]) {
       ctx.save();
-      if (interpolated) {
-        ctx.setLineDash([3, 3]);
-        ctx.globalAlpha = 0.75;
-      }
+      /* INTERPOLATED SEGMENTS ARE FAINTER, NOT DASHED. Over the casing a dash showed the black
+         between its dashes, and a best track that alternates 6-hourly fixes with 3-hourly
+         interpolations drew as a chain. The distinction is kept, as ink rather than texture. */
+      if (interpolated) ctx.globalAlpha = 0.6;
       for (let cat = -1; cat < 7; cat++) {
         ctx.strokeStyle = cat < 0 ? UNKNOWN_INK : CATEGORY_COLOR[CATEGORY_ORDER[cat]];
         ctx.beginPath();

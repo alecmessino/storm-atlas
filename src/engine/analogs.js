@@ -61,9 +61,14 @@ function toMs(t) {
  * Rank historical genesis events near (lat, lon) and describe what became of them.
  *
  * `asOf` is the zero-peek gate the back-test harness depends on: when set, only storms whose
- * GENESIS was strictly before that instant are eligible. Without it a back-test would score a
- * 2015 disturbance against analogs drawn from 2016-2025, which is not a base rate, it is the
- * answer written down in advance.
+ * OUTCOME WAS KNOWN strictly before that instant are eligible -- storms whose track had ENDED
+ * (`storms.end_t`) before it. Without it a back-test would score a 2015 disturbance against
+ * analogs drawn from 2016-2025, which is not a base rate, it is the answer written down in
+ * advance.
+ *
+ * Methodology 1.1.1 moved this from genesis to track end, in both surfaces together: a storm
+ * that had formed but was still alive at `asOf` carried an outcome nobody at `asOf` could have
+ * known. See get_analogs in analogs.py for the measurement.
  */
 export function getAnalogs(archive, opts = {}) {
   const {
@@ -112,7 +117,13 @@ export function getAnalogs(archive, opts = {}) {
     const gtMin = G.num("genesis_t", i);
     if (glat === null || glon === null || gtMin === null) continue; // no genesis point
     const gtMs = gtMin * MS_PER_MIN;
-    if (asOfMs !== null && gtMs >= asOfMs) continue; // THE ZERO-PEEK GATE
+    if (asOfMs !== null) {
+      /* THE ZERO-PEEK GATE: the outcome must have been KNOWN before asOf, so the track must have
+         ended before it. No recorded end means no known knowledge time, and the gate excludes
+         when unsure. The genesis test stays beside it, as in analogs.py. */
+      const endMs = S.time("end_t", i);
+      if (endMs === null || endMs >= asOfMs || gtMs >= asOfMs) continue;
+    }
     const month = new Date(gtMs).getUTCMonth() + 1;
     if (months && !months.has(month)) continue;
     const season = G.num("season", i) || S.num("season", i);
@@ -282,14 +293,21 @@ export function getAnalogs(archive, opts = {}) {
   // 1980s 22.5%, 1990s 29.7%. The step is not weather -- before geostationary satellites and
   // Dvorak, major hurricanes there were simply not seen, and a pool reaching into those seasons
   // drags every intensity rate downward invisibly.
-  const early = cases.filter((c) => c.season && c.season < 1971);
-  if (early.length && !minPoolSeason) {
+  //
+  // IT COUNTS THE EAST PACIFIC STORMS THE FINDING IS ABOUT (methodology 1.1.1). It used to count
+  // every pre-1971 analog, so an Atlantic pool was told it was biased LOW by an observing gap the
+  // Atlantic record does not show, and ANY season floor silenced it -- 1900 included. Now it
+  // fires on EP members before 1971 unless the declared floor is 1971 or later. analogs.py
+  // carries the measurements; the string is compared verbatim by the parity harness.
+  const early = cases.filter((c) => c.basin === "EP" && c.season && c.season < 1971);
+  if (early.length && (minPoolSeason === null || minPoolSeason === undefined
+    || minPoolSeason < 1971)) {
     gaps.push(
-      `${early.length} of ${cases.length} analogs are from before 1971, when East Pacific ` +
-      "intensities were estimated without geostationary satellites or Dvorak analysis and " +
-      "major hurricanes were under-observed (measured: 1.7% Cat 3 in the 1960s vs 20-30% from " +
-      "the 1970s on). Intensity rates above are therefore biased LOW. Pass " +
-      "min_pool_season=1971 to restrict the pool to the reliably-observed era.");
+      `${early.length} of ${cases.length} analogs are East Pacific storms from before 1971, ` +
+      "when East Pacific intensities were estimated without geostationary satellites or " +
+      "Dvorak analysis and major hurricanes were under-observed (measured: 1.7% Cat 3 in the " +
+      "1960s vs 20-30% from the 1970s on). Intensity rates above are therefore biased LOW by " +
+      "those storms. Pass min_pool_season=1971 to restrict the pool to the reliably-observed era.");
   }
 
   // Stable sort on descending weight. The explicit comparator returns 0 for equal weights so
@@ -582,10 +600,34 @@ function landfallView(l) {
     landfall_utc: l.t === null ? null : new Date(l.t).toISOString(),
     vmax_kt: l.vmax_kt,
     category: l.category,
-    hurricane: l.hurricane_at_landfall === true,
+    /* THREE STATES, NOT TWO. The pack's null is an UNKNOWN class and stays null here; coercing
+       it with `=== true` scored it as a measured "no" until methodology 1.1.1. Only
+       hurricaneAtLandfallState decides what a null means for a contract. */
+    hurricane: l.hurricane_at_landfall,
     detection: l.detection,
     suspect_relocation: l.suspect_relocation === true,
   };
+}
+
+/**
+ * Did this storm come ashore in this region at hurricane strength? true, false, or null for
+ * UNKNOWN -- which Rule 4 then takes out of the denominator and counts. Port of
+ * `hurricane_at_landfall_state` in analogs.py, where the three states are argued in full:
+ *
+ *   true   any row in the region says true;
+ *   null   no row says true, at least one is null, and the storm's peak reached 64 kt or is
+ *          itself unrecorded -- it could have been a hurricane there, and the record cannot say;
+ *   false  everything else, including null rows on a storm that never reached 64 kt anywhere.
+ *
+ * @param hits  the storm's landfall views in ONE region, suspect relocations already removed
+ */
+export function hurricaneAtLandfallState(hits, peakVmaxKt) {
+  if (hits.some((h) => h.hurricane === true)) return true;
+  if (hits.some((h) => h.hurricane === null || h.hurricane === undefined)) {
+    const v = peakVmaxKt;
+    if (v === null || v === undefined || Number.isNaN(v) || v >= THRESHOLDS_KT.cat1) return null;
+  }
+  return false;
 }
 
 /**
@@ -684,16 +726,23 @@ export function scoreCases(A, cases, {
   const asked = new Set(regions || []);
   const reportRegions = [...new Set([...hitRegions, ...[...asked].filter((r) => knownRegions.has(r))])]
     .sort();
-  /* analogs.py:675. The denominator is EVERY matched case, not just the ones that came ashore,
-     and the weighted denominator is wsum for the same reason: the question is "what fraction of
-     the storms that formed here reached this coast", so a storm that went out to sea is a
-     measured no, not a missing value. Hence n_unknown = 0 -- there is nothing unknown about it. */
+  /* analogs.py section 6. For ANY landfall the denominator is EVERY matched case, not just the
+     ones that came ashore, and the weighted denominator is wsum for the same reason: the question
+     is "what fraction of the storms that formed here reached this coast", so a storm that went
+     out to sea is a measured no, not a missing value. Hence n_unknown = 0 there.
+
+     HURRICANE-AT-LANDFALL IS DIFFERENT SINCE METHODOLOGY 1.1.1, because its class can be
+     unknown (hurricaneAtLandfallState). Rule 4 applies exactly as it does to the intensity rows:
+     an unknown storm leaves the denominator, is counted in n_unknown, and its weight leaves the
+     weighted denominator -- accumulated here in case order, where the Python accumulates it. */
   const landfall = {};
   for (const region of reportRegions) {
     let any = 0;
     let hur = 0;
+    let hurUnknown = 0;
     let wAny = 0;
     let wHur = 0;
+    let wHurDen = 0;
     for (const c of cases) {
       const hits = c.landfalls.filter((l) => l.region === region && !l.suspect_relocation);
       if (hits.length) {
@@ -701,7 +750,10 @@ export function scoreCases(A, cases, {
         wAny += c.weight;
         if (members) memberPush(members.landfall, `${region}:any`, c.row);
       }
-      if (hits.some((h) => h.hurricane)) {
+      const state = hurricaneAtLandfallState(hits, c.peak_vmax_kt);
+      if (state === null) { hurUnknown++; continue; } // RULE 4: unknown is not a failure
+      wHurDen += c.weight;
+      if (state) {
         hur++;
         wHur += c.weight;
         if (members) memberPush(members.landfall, `${region}:hurricane`, c.row);
@@ -720,8 +772,8 @@ export function scoreCases(A, cases, {
         ? circularRefusal(any, cases.length, 0, because)
         : rateResult(any, cases.length, 0, minSample, wAny, wsum),
       hurricane: circular.landfall.has(`${region}:hurricane`)
-        ? circularRefusal(hur, cases.length, 0, because)
-        : rateResult(hur, cases.length, 0, minSample, wHur, wsum),
+        ? circularRefusal(hur, cases.length - hurUnknown, hurUnknown, because)
+        : rateResult(hur, cases.length - hurUnknown, hurUnknown, minSample, wHur, wHurDen),
     };
   }
 
@@ -811,7 +863,8 @@ export function scoreCases(A, cases, {
         let first = null;
         for (const l of c.landfalls) {
           if (l.region !== region || l.suspect_relocation) continue;
-          if (kind === "hurricane" && !l.hurricane) continue;
+          // Only an OBSERVED hurricane landfall has a time; an unknown class (null) does not.
+          if (kind === "hurricane" && l.hurricane !== true) continue;
           const lt = l.landfall_utc === null ? NaN : Date.parse(l.landfall_utc);
           if (!Number.isFinite(lt)) continue;
           if (first === null || lt < first) first = lt;

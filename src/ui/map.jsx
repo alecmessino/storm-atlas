@@ -29,9 +29,9 @@ import React from "react";
 import { PopulationLayer } from "../render/population-layer.js";
 import { SelectionLayer } from "../render/selection-layer.js";
 import { OperationalLayer } from "../render/operational-layer.js";
+import { ForecastLayer } from "../render/forecast-layer.js";
 import { PathwayLayer } from "../render/pathway-layer.js";
 import { CoastlineLayer } from "../render/coastline-layer.js";
-import { ReplayHeadsLayer, ReplayLayer } from "../render/replay-layer.js";
 import { hitGenesis } from "../render/hit-test.js";
 import { CATEGORY_COLOR, MAJOR_FROM } from "../render/palette.js";
 import { formatPosition, wrap180 } from "../engine/geo.js";
@@ -45,7 +45,6 @@ const L = globalThis.L;
    centre someone once typed. */
 const FALLBACK_CENTER = [21, -78];
 const FALLBACK_ZOOM = 3;
-const EMPTY_ROWS = new Uint32Array(0);
 
 /* The scale bar snaps to one of these rather than printing whatever 100 px happens to be.
    A bar labelled "1,143 KM" is a measurement of the viewport, not of the map. */
@@ -65,11 +64,15 @@ const RETICLE_TOLERANCE = 12;
  *   HOME     the canonical NA + EP aperture. Longitude-fitted and clamped: see below.
  *   FIT      whatever evidence is currently drawn. Contain-fitted, with a margin, unclamped --
  *            a reader who has filtered to dateline crossers is asking to be taken to them.
- *   SUBJECT  selecting a storm fits that storm's track. The one automatic move, and it is a
- *            NAVIGATION rather than a re-frame: the reader asked to look at one storm.
+ *   SUBJECT  selecting a storm fits that storm's track. A NAVIGATION rather than a re-frame:
+ *            the reader asked to look at one storm.
+ *   PLACE    a committed question that names a PLACE -- formed near here, formed in this basin,
+ *            entered this sub-basin -- frames its cohort, while the camera is still the one the
+ *            page opened on. The question asked to look somewhere; the plate goes there. The
+ *            moment the reader moves the camera themselves, this stops, until HOME or FIT.
  *
- * AND NOTHING ELSE MOVES IT. A cohort edit, a layer toggle, a mode switch and a replay tick all
- * leave the camera exactly where the reader put it. That is the rule `userMoved` records and
+ * AND NOTHING ELSE MOVES IT. An outcome, season or scope edit, a layer toggle and a replay tick
+ * all leave the camera exactly where it is. That is the rule `userMoved` records and
  * scripts/check-atlas-camera.mjs measures; it is stated here because the failure it prevents --
  * a query change quietly re-framing a map somebody had just panned -- reads as a bug in the
  * filter rather than as a camera decision.
@@ -222,22 +225,33 @@ export function applyFrame(m, frame, { clamp = null, mode = "cover", padPx = 0, 
    * the two readings are the same coordinate by construction. */
   const half = m.getSize().divideBy(2);
   const origin = L.point(Math.round(centre.x - half.x), Math.round(centre.y - half.y));
-  m.setView(m.unproject(origin.add(half), z), z, { animate: false });
+  /* reset:true, BECAUSE LEAFLET'S SAME-ZOOM PATH TRUNCATES. setView at an unchanged zoom goes
+     through _tryAnimatedPan, which pans by the TRUNCATED pixel offset -- so HOME pressed from the
+     aperture's own zoom landed a pixel off the HOME pressed from any other (measured at
+     1680x1050: 38.3605N against 38.2630N, pane offset -15 against 0). A reset view is placed
+     exactly, whatever the camera was doing. */
+  m.setView(m.unproject(origin.add(half), z), z, { animate: false, reset: true });
   return true;
 }
 
 export function AtlasMap({
   archive, world, coast, contextLand = null, rows, emphasis, selected, onSelect, onProbe, probe,
   replayMs, home,
-  operationalTrack = null,
+  operationalTrack = null, forecastOverlay = null,
   homeClamp = null, homeAnchor = null, evidenceFrame = null, subjectFrame = null,
   colorBy, showPathway, pathway, pathwayStep, dimPopulation, softenEmphasis, onViewChange,
   onHover, showGenesis = true, showLandfalls = true,
-  showGenesisDensity, genesisDensity, mode = "explore", timeline, replayCursorMin,
+  showGenesisDensity, genesisDensity,
   kept = 0, context = 0, selectedCount = 0, hint, onGesture, cameraApi = null, children,
   underDensity = false, plateMode = "pathway", onPlateMode = null, lens = null,
-  onBrush = null, brush = null,
+  onBrush = null, brush = null, baselineNoun = null, onPick = null, autoFrame = null,
+  layerControls = null, overlay = null,
 }) {
+  /* THE ARCHIVE REPLAY IS GONE, AND THIS IS WHERE ITS MODE WAS. The record unfolding in time
+     animated a population it computed nothing about, and it shared a play flag with the storm
+     transport that started the wrong clock. A storm's own time is the transport's; the plate is
+     the finished record. */
+  const mode = "explore";
   const el = React.useRef(null);
   const plate = React.useRef(null);
   const map = React.useRef(null);
@@ -279,7 +293,7 @@ export function AtlasMap({
 
   // Callers change identity every render; keep them in a ref so the map is built once.
   const cb = React.useRef({});
-  cb.current = { onSelect, onProbe, onViewChange, onHover, onGesture, onBrush };
+  cb.current = { onSelect, onProbe, onViewChange, onHover, onGesture, onBrush, onPick };
   /* WHAT THE CELL UNDER THE POINTER COUNTS. The active density Map and the cohort size, read by
      the mousemove handler through a ref so the readout costs no render: the literal count for
      the cell is one Map lookup on the same "lat,lon" key the engine emitted, never a value the
@@ -321,6 +335,34 @@ export function AtlasMap({
      geography it does not research; a reader who has asked for the storms that crossed the
      dateline is asking to be taken to them, and refusing would be the camera overruling the
      query. The margin is 24px on each side so a track does not run into the graticule ticks. */
+  /* THE CAMERA FOLLOWS A COMMITTED QUESTION -- UNTIL THE READER TAKES IT.
+   *
+   * A cohort of East Pacific storms opened in the bottom-left corner of a plate framed for two
+   * basins, a quarter of the pixels doing all the work and Labrador taking the rest. So a COMMIT
+   * -- a new question, not a hover, a hold or a brush -- frames the plate on the cohort's own
+   * core (its fixes at q3..q97, see cohortFrame in atlas.jsx). What it never does is move a
+   * camera the reader has moved: once they pan or zoom, `userMoved` holds the view where they put
+   * it through every edit, exactly as before, and HOME or FIT hands it back. Keyed on the
+   * question, so an edit that changes nothing about the members moves nothing. */
+  const autoKey = autoFrame ? autoFrame.key : null;
+  React.useEffect(() => {
+    const m = map.current;
+    /* A SELECTED STORM'S FRAME GOVERNS WHILE IT IS SELECTED, and letting go of it moves nothing:
+       the key did not change, so the effect does not run. */
+    if (!ready || !m || !autoFrame || autoFrame.suspended || userMoved.current) return;
+    const f = frames.current;
+    if (autoFrame.frame) {
+      camera(m, () => applyFrame(m, autoFrame.frame, { mode: "contain", padPx: 28 }));
+      atAperture.current = false;
+    } else if (!atAperture.current) {
+      /* NO CONDITION, NO COHORT OF ITS OWN: the question is the archive, and the archive's
+         frame is HOME. */
+      camera(m, () => applyFrame(m, f.home,
+        { clamp: f.homeClamp, anchor: f.homeAnchor, mode: "aperture" }));
+      atAperture.current = true;
+    }
+  }, [ready, autoKey]);
+
   const goFit = React.useCallback(() => {
     const m = map.current;
     if (!m) return;
@@ -414,16 +456,17 @@ export function AtlasMap({
        reading one for the other. */
     const genesisLayer = new PathwayLayer({ hue: "155, 123, 240", zIndexOffset: 1 }).addTo(m);
     const population = new PopulationLayer().addTo(m);
-    const replay = new ReplayLayer().addTo(m);
     const selection = new SelectionLayer().addTo(m);
     /* THE OPERATIONAL TRACK OF A CURRENT STORM. Mounted always, holding a track almost never --
        an empty layer costs one canvas and no paint. When it DOES hold one the selection layer is
        fed -1, so the two never draw at the same time: precedence on the plate is one track or
        the other, never both a pixel apart. */
     const operational = new OperationalLayer().addTo(m);
-    const replayHeads = new ReplayHeadsLayer().addTo(m);
-    layers.current = { coastline, pathwayLayer, genesisLayer, population, replay, selection,
-      operational, replayHeads };
+    /* THE LAUNCHED LIVE SYSTEM AND ITS FORECAST. Mounted always, empty unless a cohort is keyed
+       to a live system; withdrawn while an archive storm is selected, so one subject is drawn. */
+    const forecastLayer = new ForecastLayer().addTo(m);
+    layers.current = { coastline, pathwayLayer, genesisLayer, population, selection,
+      operational, forecastLayer };
 
     const readFrame = () => setFrame(measure(m));
     m.on("moveend zoomend resize", () => {
@@ -446,8 +489,16 @@ export function AtlasMap({
       if (brushing.current) { brushing.current = false; return; }
       const hit = hitGenesis(archiveRef.current, m, e.containerPoint,
         { rows: rowSetRef.current });
+      /* AN UNAMBIGUOUS GENESIS POINT SELECTS ITS STORM. ANYTHING ELSE IS A QUESTION ABOUT THE
+         PLACE, AND THE PLACE IS ANSWERED BEFORE IT IS ASKED. A click on open water used to move
+         the reader's genesis condition on the spot -- rewriting the question, the rates and the
+         URL on a gesture a reader also uses to look. It now opens the pick card: which of the
+         cohort's storms pass through this cell, each one selectable, and a button that commits
+         the location condition. Inspection changes the view; commit changes the answer. */
       if (hit) cb.current.onSelect && cb.current.onSelect(hit.row);
-      else cb.current.onProbe && cb.current.onProbe(e.latlng.lat, e.latlng.lng);
+      else if (cb.current.onPick) {
+        cb.current.onPick(e.latlng.lat, e.latlng.lng, { x: e.containerPoint.x, y: e.containerPoint.y });
+      } else if (cb.current.onProbe) cb.current.onProbe(e.latlng.lat, e.latlng.lng);
     });
 
     /* ── THE GEOGRAPHIC BRUSH ────────────────────────────────────────────────────────────
@@ -568,8 +619,6 @@ export function AtlasMap({
     globalThis.__ATLAS_MAP = m;
     globalThis.__ATLAS_POPULATION = population;
     globalThis.__ATLAS_COASTLINE = coastline;
-    globalThis.__ATLAS_REPLAY = replay;
-    globalThis.__ATLAS_REPLAY_HEADS = replayHeads;
     globalThis.__ATLAS_HIT = (map_, pt) => hitGenesis(archiveRef.current, map_, pt,
       { rows: rowSetRef.current });
     setReady(true);
@@ -595,8 +644,6 @@ export function AtlasMap({
     if (!ready) return;
     layers.current.population.setArchive(archive, world);
     layers.current.selection.setArchive(archive, world);
-    layers.current.replay.setArchive(archive, world);
-    layers.current.replayHeads.setArchive(archive, world);
   }, [ready, archive, world]);
 
   /* The archive's own rings, when they arrive. Until then the plate draws its graticule over
@@ -617,17 +664,14 @@ export function AtlasMap({
   React.useEffect(() => {
     if (!ready) return;
     rowSetRef.current = rows ? new Set(rows) : null;
-    /* In replay the static population is withheld on purpose: revealing it over time is the
-       whole point, and drawing the finished mat underneath would give away the ending. */
-    layers.current.population.setSelection(mode === "replay" ? EMPTY_ROWS : rows);
-  }, [ready, rows, mode]);
+    layers.current.population.setSelection(rows);
+  }, [ready, rows]);
 
   React.useEffect(() => {
     if (!ready) return;
     layers.current.population.setStyle({
       colorBy, dimmed: dimPopulation, softenEmphasis, showGenesis, showLandfalls, underDensity,
     });
-    layers.current.replay.setStyle({ colorBy, showMarks: showGenesis || showLandfalls });
   }, [ready, colorBy, dimPopulation, softenEmphasis, showGenesis, showLandfalls, underDensity]);
 
   /* A mode change clears the cell readout and the hovered outline: the count on the foot band
@@ -647,18 +691,19 @@ export function AtlasMap({
      a slab, and the cohort's own cells are its brightest. The layer's alpha is scaled -- the
      counts, the peak and the ramp are untouched -- so the reading stays literal and the subject
      is the thing the eye finds first. */
-  React.useEffect(() => {
-    if (!ready) return;
-    layers.current.pathwayLayer.setDimmed(!!dimPopulation);
-    layers.current.genesisLayer.setDimmed(!!dimPopulation);
-  }, [ready, dimPopulation]);
+  /* (Applied with the lens below, so the two cannot fight over the same flag.) */
 
   /* THE HELD ROW'S OWN STORMS. The rows arrive from the engine through the shell; this layer is
      told which to lift and never asks what the contract means. */
   React.useEffect(() => {
     if (!ready) return;
-    layers.current.population.setLens(lens ? lens.rows : null);
-  }, [ready, lens]);
+    layers.current.population.setLens(lens ? lens.rows : null, lens ? lens.ink : null,
+      lens ? !!lens.single : false);
+    /* AND THE COUNTS UNDER IT STEP BACK WHILE A SET IS LIFTED, as they do for a selected storm:
+       the held storms are the subject, the shading is the ground they are read against. */
+    layers.current.pathwayLayer.setDimmed(!!dimPopulation || !!lens);
+    layers.current.genesisLayer.setDimmed(!!dimPopulation || !!lens);
+  }, [ready, lens, dimPopulation]);
 
   /* WHAT THE LAYER ACTUALLY DREW, REPORTED AFTER IT DREW IT.
    *
@@ -699,6 +744,11 @@ export function AtlasMap({
     layers.current.selection.setStorm(selected === null || governed ? -1 : selected);
     layers.current.operational.setTrack(governed ? operationalTrack : null);
   }, [ready, selected, operationalTrack]);
+
+  React.useEffect(() => {
+    if (!ready) return;
+    layers.current.forecastLayer.setData(selected === null ? forecastOverlay : null);
+  }, [ready, selected, forecastOverlay]);
 
   /* THE CAMERA, REACHABLE FROM OUTSIDE. The shell binds H and F to these, and the camera gate
      drives them; both are the same two functions the controls call, so a keystroke and a click
@@ -767,22 +817,6 @@ export function AtlasMap({
     if (!ready) return;
     layers.current.genesisLayer.setDensity(showGenesisDensity ? genesisDensity : null, pathwayStep);
   }, [ready, showGenesisDensity, genesisDensity, pathwayStep]);
-
-  /* The replay. Both layers are mounted for the life of the map and simply hold no timeline
-     outside replay mode -- adding and removing canvases on a mode switch would throw away the
-     accumulated picture every time, which is exactly what this layer exists not to do. */
-  React.useEffect(() => {
-    if (!ready) return;
-    const tl = mode === "replay" ? timeline : null;
-    layers.current.replay.setTimeline(tl);
-    layers.current.replayHeads.setTimeline(tl);
-  }, [ready, mode, timeline]);
-
-  React.useEffect(() => {
-    if (!ready || mode !== "replay" || replayCursorMin === null || replayCursorMin === undefined) return;
-    layers.current.replay.setCursor(replayCursorMin);
-    layers.current.replayHeads.setCursor(replayCursorMin);
-  }, [ready, mode, replayCursorMin]);
 
   /* The probe ring: where the reader asked the archive's question. A true-metre circle of the
      query's own radius, so the sample is visibly a circle on the map rather than an
@@ -895,7 +929,7 @@ export function AtlasMap({
           fixed pair of coordinates under a movable camera is a caption that becomes a lie on the
           first drag. */}
       <div className="at-platehead">
-        <span className="at-plate-title">PLATE 1 · NORTH ATLANTIC + EAST PACIFIC</span>
+        <span className="at-plate-title">PLATE 1<span className="at-plate-region"> · NORTH ATLANTIC + EAST PACIFIC</span></span>
         {/* THE HEAD NAMES THE PLATE, ITS READING AND ITS APERTURE -- AND NOTHING THE PAGE HAS
             ALREADY SAID. The cohort count used to sit here too, and with the mode segment
             beside it the line clipped at 1440: the region name lost its second basin and the
@@ -904,19 +938,15 @@ export function AtlasMap({
             which is the sentence that explains what the fainter ink is. Replay is the one state
             the head still counts, because there the number is the run's and nothing else on the
             page states it. */}
-        {mode === "replay" ? (
-          <span className="at-plate-counts"><em>{kept.toLocaleString()}</em> IN THIS RUN</span>
-        ) : null}
-        {/* THE ONE STATE THE LINE STILL NAMES, and it is not atmosphere: in replay the static
-            population is deliberately withheld, so a plate that looks empty is correct and a
-            reader has to be told which of the two things they are looking at. */}
-        {mode === "replay" ? <span className="at-plate-mode">REPLAY</span> : null}
         {/* THE PLATE'S MODE, ON THE PLATE. Pathway counts / Genesis counts / Tracks: three
             readings of the same storms, a map-dependent control, so it sits on the plate head
             beside the aperture it changes the reading of -- never in the clause editor, which
             changes the QUESTION. The plate rests on Pathway counts (Handoff B). */}
         {onPlateMode ? <PlateModes mode={plateMode} onMode={onPlateMode} /> : null}
-        <span className="at-r at-plate-aperture" data-plate-aperture>{apertureOf(frame)}</span>
+        {/* THE LAYERS, ON THE PLATE THEY DRAW ON. They were three toggles under HOW IT IS DRAWN at
+            the bottom of the clause editor -- the one sheet on the surface that changes the
+            QUESTION -- so turning off genesis dots meant opening the query to edit the ink. */}
+        {layerControls}
       </div>
 
       {/* THE STAGE IS THE DARK SUBTREE AND IT HOLDS THE PLATE AND NOTHING ELSE.
@@ -944,6 +974,7 @@ export function AtlasMap({
               aria-hidden="true" />
           ) : null}
           {hover ? <HoverChip hover={hover} frame={frame} /> : null}
+          {overlay}
         </div>
       </div>
 
@@ -1032,17 +1063,17 @@ export function AtlasMap({
        * rather than economising on. It cannot move the plate either way -- see the declared
        * stage height in atlas.css. */}
       <div className="at-plate-figure">
-        <p className="at-plate-caption" data-plate-caption>
+        {/* ONE LINE, AND WHERE THE MEASURE ELLIPSISES IT THE WHOLE SENTENCE IS ITS TITLE. */}
+        <p className="at-plate-caption" data-plate-caption
+          ref={(el) => { if (el) el.title = (el.textContent || "").replace(/\s+/g, " ").trim(); }}>
           <em>Figure 1.</em>{" "}
-          {mode === "replay"
-            ? <>The {kept.toLocaleString()} storms in this run, in the order the archive recorded
-                them.</>
-            : probe && probe.radiusKm
+          {probe && probe.radiusKm
               ? <>The {kept.toLocaleString()} storms in this cohort; the dashed circle is
                   the {Math.round(probe.radiusKm).toLocaleString()} km condition.</>
               : context && context !== kept
                 ? <>The {kept.toLocaleString()} storms in this cohort, over
-                    the {context.toLocaleString()} of the archive drawn behind them.</>
+                    the {context.toLocaleString()} of its baseline
+                    {baselineNoun ? <> (without {baselineNoun})</> : null} drawn behind them.</>
                 : <>The {kept.toLocaleString()} storms in the archive cohort.</>}
           {hasArchiveCoast ? null : (
             <>{" "}<b className="at-plate-model" data-coastline-degraded>
@@ -1059,7 +1090,11 @@ export function AtlasMap({
           {/* THE PROJECTION IS A FACT ABOUT THE FIGURE, NOT A READING OF IT, so it sits on the
               figure line with PLATE NOTES rather than on the foot with the key and the measure.
               On the foot it was the item that pushed the stroke note off the line at 1440. */}
-          <span className="at-plate-proj">MERCATOR · GRATICULE 10° / 5°</span>
+          {/* THE APERTURE, BESIDE THE PROJECTION IT IS STATED IN. It sat on the plate head and
+              pushed the head to two lines; here it reads as the figure's extent, which is what
+              it is. The graticule's spacing is in PLATE NOTES. */}
+          <span className="at-plate-proj">MERCATOR · <span className="at-plate-aperture"
+            data-plate-aperture>{apertureOf(frame)}</span></span>
           {hasArchiveCoast ? (
             <details className="at-plate-notes" data-plate-notes>
               <summary title="what this plate draws, and from which geometry">PLATE NOTES</summary>
@@ -1081,9 +1116,11 @@ export function AtlasMap({
                   margin rather than across it: 10° major ticks with labels, 5° minor.
                 </p>
                 <p>
-                  <b>THE GESTURE</b> Click open water to ask what formed near there and where it
-                  went. Click a genesis point to open that storm. HOME restores the canonical
-                  aperture; FIT frames whatever is drawn now.
+                  <b>THE GESTURE</b> Click open water to see which of this cohort&rsquo;s storms
+                  pass through that 2° cell; the card that opens asks what formed near there only
+                  when you press its button. Click a genesis point to open that storm. Shift-drag
+                  to brush an area. HOME restores the canonical aperture; FIT frames whatever is
+                  drawn now.
                 </p>
               </div>
             </details>
@@ -1215,6 +1252,14 @@ function ClassKey() {
   );
 }
 
+/* A LONGITUDE, WRAPPED. Leaflet's bounds run past ±180 when the camera straddles the dateline,
+   and "200°W" is not a longitude. ±180 prints as 180°, which has no hemisphere. */
+export function lonLabel(v) {
+  const w = ((Math.round(v) + 540) % 360) - 180;
+  if (w === -180 || w === 180) return "180°";
+  return `${Math.abs(w)}°${w < 0 ? "W" : w > 0 ? "E" : ""}`;
+}
+
 /* THE PLATE'S STATED APERTURE, READ OFF THE RENDERED VIEW.
  *
  * The locked geometry rule is that a coordinate readout is legal only inside the plate's stated
@@ -1223,7 +1268,7 @@ function ClassKey() {
 function apertureOf(frame) {
   if (!frame || !frame.bounds) return "—";
   const { west, east, south, north } = frame.bounds;
-  const lon = (v) => `${Math.abs(Math.round(v))}°${v < 0 ? "W" : "E"}`;
+  const lon = lonLabel;
   const lat = (v) => `${Math.abs(Math.round(v))}°${v < 0 ? "S" : "N"}`;
   return `${lon(west)} – ${lon(east)} · ${lat(south)} – ${lat(north)}`;
 }
@@ -1328,7 +1373,7 @@ function measure(m) {
     const major = ((lon % 10) + 10) % 10 === 0;
     ticksX.push({ x: round1(x), len: major ? 7 : 4, ink: major ? "#5a6c81" : "#3d4a5b" });
     if (((lon % 20) + 20) % 20 === 0 && x > 20 && x < w - 40) {
-      labX.push({ x: round1(x), text: `${Math.abs(lon)}°${lon < 0 ? "W" : "E"}` });
+      labX.push({ x: round1(x), text: lonLabel(lon) });
     }
   }
   const south = Math.ceil(b.getSouth() / 5) * 5;

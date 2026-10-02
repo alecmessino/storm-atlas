@@ -87,7 +87,17 @@ export function CalibrationLedger({ cal, anchor, onBack, onClearAnchor, cohortBa
             </div>
             <div style={{ ...MONO, fontSize: "var(--fs-mono-xs)", color: "var(--text-2)",
               marginTop: 3 }}>
-              what this method got right, what it got wrong, and how you would know
+              what the archive's analog method got right, what it got wrong, and how you would know
+            </div>
+            {/* WHICH ESTIMATOR THIS SCORES, SAID BEFORE ANY VERDICT IS READ. The harness replayed
+                the distance- and environment-weighted analog pool (500 km, ±3 months, EP 1971+);
+                the cohort on the map is a hard-condition, uniform-weight count. Same archive,
+                different estimator -- so no verdict here is a score of the cohort beside it. */}
+            <div data-ledger-estimator style={{ fontFamily: "var(--font-sans)", fontSize: 13,
+              color: "var(--text-2)", marginTop: 6, maxWidth: "90ch", lineHeight: 1.45 }}>
+              Scored estimator: the weighted analog pool (500 km, ±3 months, East Pacific 1971+).
+              It is not the hard-condition cohort estimator on the map, so these verdicts do not
+              score the cohort beside them.
             </div>
           </div>
           <button type="button" onClick={onBack} data-back-to-map style={BTN}>

@@ -212,10 +212,11 @@ export function CohortSpec({ text, url }) {
      question in words, stamped with the definitions it was answered under, and the URL that
      reproduces it exactly. A citation whose visible half and copied half differ is not one. */
   const payload = url ? `${text}\n${url}` : text;
+  /* SUCCESS ONLY ON SUCCESS: a failed write used to read "Copied", leaving the reader to paste
+     whatever the clipboard held before. */
   const copy = () => {
-    const done = () => setCopied(true);
-    if (navigator.clipboard) navigator.clipboard.writeText(payload).then(done, done);
-    else done();
+    if (navigator.clipboard) navigator.clipboard.writeText(payload).then(() => setCopied("ok"), () => setCopied("fail"));
+    else setCopied("fail");
   };
   return (
     <div className="at-spec" data-cohort-spec>
@@ -228,7 +229,7 @@ export function CohortSpec({ text, url }) {
         {url ? <code className="at-url">{url}</code> : null}
       </div>
       <TextButton onClick={copy} hook="data-copy-spec" title="copy the question, its stamps and its URL">
-        {copied ? "Copied" : "Copy"}
+        {copied === "ok" ? "Copied" : copied === "fail" ? "Copy failed" : "Copy"}
       </TextButton>
     </div>
   );

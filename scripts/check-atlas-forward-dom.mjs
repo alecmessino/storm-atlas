@@ -61,7 +61,7 @@ const DOCS = join(ROOT, "docs");
  * advisory `scripts/test-atlas-forward.mjs` runs against, wrapped in the envelope the original pipeline
  * publishes -- so the unit gate and this one are pinned to ONE forecast and cannot disagree. */
 const LIVE_PATH = "/storm-atlas/data/atlas-live-v1.json";
-const OFFICIAL_PATH = "/storm-atlas/data/latest.json";
+const OFFICIAL_PATH = "/storm-atlas/data/atlas-forecast-v1.json";
 const NOW = Date.parse("2026-09-21T03:36:15.434Z");   // the pinned payload's own instant
 
 const deckText = await readFile(join(ROOT, "scripts/fixtures/bdeck-ep172026.dat"), "utf8");
@@ -87,12 +87,19 @@ const ARTIFACT = buildAtlasLive({
   previous: null,
 });
 
-/* the pipeline's envelope around the pinned advisory. `generatedAt` is the payload stamp the
+/* The original pipeline's envelope around the pinned advisory. `generatedAt` is the payload stamp the
    vintage row prints; the advisory's own instant is the first forecast point's, as it is in the
    real file. */
 const OFFICIAL_PAYLOAD = {
-  generatedAt: official.latest_json_generated_at,
-  storms: [{ id: official.atcf_id, name: official.name, trackPoints: official.trackPoints }],
+  /* The forecast file's envelope (atlas-forecast-v1, written from the capture) around the
+     same pinned advisory. No watch is supplied here, and the surface must say so rather than
+     show a verdict. */
+  schema: "atlas-forecast-v1",
+  generated_at: official.latest_json_generated_at,
+  watch: { supplied: false },
+  storms: { [official.atcf_id]: { atcf_id: official.atcf_id, ok: true, advisory: null,
+    trackPoints: official.trackPoints, cone: null, guidance: { cycle: null, runs: [], missing: [] },
+    source: { first_seen: null }, watch: null } },
 };
 
 const REQUIRE_BROWSER = process.argv.includes("--require-browser")
@@ -116,7 +123,7 @@ const QUERY = "?v=1&w=14.5%2C-105.1%2C250&m=1.1.0";
    +78 h, where the archive holds 94 of 110 and 6 of them were at or above 115 kt. It must be the
    same four numbers at every width: a layout that folds the finding away has not adapted. */
 const HERO = "NHC: 115 kt at 24 Sep 00Z. Historical placement: 6 of 94.";
-const STAND = "78 h after genesis · 94 of 110 comparable storms still in the record";
+const STAND = "78 h after genesis · 94 of 110 cohort storms still in the record";
 
 /* SIX WIDTHS, EACH A REAL SIZE RATHER THAN A BREAKPOINT. A band tested only at its own pixel
    proves the rule fires, not that the layout inside it works -- which is how 960 was missed. */
@@ -195,18 +202,13 @@ for (const [band, W] of WIDTHS) {
 
   console.log(`\n  ── ${W}px · ${band}`);
 
-  /* THE OFFER IS PRESENT AND THE FORECAST IS NOT ALREADY READ. The payload is 80 KB of the
-     pipeline's, and taking it without being asked is the cost this design refused. */
-  const offer = await page.$("[data-forward-load]");
-  ok("the forward view offers the read rather than taking it",
-    !!offer && !(await page.$("[data-forward-outcome]")));
-  if (!offer) { await ctx.close(); continue; }
-  const before = await page.evaluate(() =>
-    document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  await offer.click();
+  /* NO PRESS BETWEEN THE LAUNCH AND THE PLACEMENT. The forecast used to be an 80 KB
+     payload, read only on a press; it is now a small file read beside the live artifact, so a
+     cohort keyed to a live system's genesis gets its advisory laid against it at once. */
+  const before = 0;
   await page.waitForSelector("[data-forward-outcome]", { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(900);
-  ok("and the placement renders on the press", !!(await page.$("[data-forward-outcome]")));
+  ok("the placement renders with no press", !!(await page.$("[data-forward-outcome]")));
   ok("with nothing thrown", errors.length === 0, errors.join(" · "));
 
   /* THE FINDING SURVIVES THE WIDTH. */
@@ -231,7 +233,8 @@ for (const [band, W] of WIDTHS) {
      asserted rather than the absolute. The Atlas already overflows by 8 px at 390 -- the evidence
      deck's status cell, which predates this work and is not this view's to fix -- so an absolute
      bound would either fail on someone else's defect or carry a slack big enough to hide a real
-     one. `before` is measured on the same page, at the same width, one press earlier. The audit
+     one. `before` is zero: the placement now renders without a press, so the page must carry no
+     sideways scroll at all once it has. The audit
      tables scroll themselves precisely so this number stays zero. */
   const grew = await page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -346,7 +349,6 @@ if (process.argv.includes("--self-test")) {
   await page.goto(`http://127.0.0.1:${port}/storm-atlas/${QUERY}`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => globalThis.__ATLAS && globalThis.__ATLAS.archive, { timeout: 90000 });
   await page.waitForTimeout(500);
-  await (await page.$("[data-forward-load]")).click();
   await page.waitForSelector("svg.at-fo-plate", { timeout: 30000 });
   await page.waitForTimeout(800);
 

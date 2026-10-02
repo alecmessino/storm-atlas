@@ -102,7 +102,7 @@ await open();
   void reached;
   const tabbed = [];
   await page.evaluate(() => document.body.focus());
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     await page.keyboard.press("Tab");
     const cur = await page.evaluate(`(() => {
       const el = document.activeElement;
@@ -122,7 +122,23 @@ await open();
   ok("the keyboard reticle is reachable", has("data-reticle-toggle"));
   ok("the question's clauses are reachable", has("data-zone-edit"));
   ok("the answer's rows are reachable", has("data-lens-row"));
+  /* THE CITATION IS SEALED FROM THE INSPECTOR'S FOOT NOW, and the colophon's CITE still exists;
+     either is the reader's way to cite what is on screen. */
+  /* BOTH WAYS TO CITE ARE REACHABLE: the seal on the inspector and the colophon's CITE. Neither
+     stands in for the other -- a keyboard reader who cannot reach CITE has lost it. */
+  ok("the seal is reachable", has("data-open-seal"));
   ok("the citation is reachable", has("data-cite-cohort"));
+  ok("the first Tab is the skip link to the answer",
+     tabbed.length > 0 && /Skip to the answer/.test(tabbed[0].name), tabbed[0] && tabbed[0].name);
+  const land = await page.evaluate(() => ({
+    main: document.querySelectorAll("main").length,
+    h1: [...document.querySelectorAll("h1")].map((h) => (h.textContent || "").trim().slice(0, 40)),
+    answer: !!document.querySelector("#atlas-answer[aria-label]"),
+  }));
+  ok("the surface has one main landmark", land.main === 1, String(land.main));
+  ok("and one h1, which is the question", land.h1.length === 1 && /happened next|formed/i.test(land.h1[0]),
+     JSON.stringify(land.h1));
+  ok("the answer is a labelled region the skip link lands on", land.answer);
   const unnamed = tabbed.filter((t) => !t.name);
   ok("every control Tab reaches has an accessible name", unnamed.length === 0,
     JSON.stringify(unnamed.slice(0, 6)));

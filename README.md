@@ -11,12 +11,16 @@ Live site: https://alecmessino.github.io/storm-atlas/
   - `docs/data/atlas-*.bin.gz` and `atlas-manifest.json` are the archive packs, a versioned snapshot.
   - `docs/data/atlas-live-v1.json` and `docs/data/latest.json` are the live operational files,
     refreshed every 10 minutes from NHC's public ATCF decks, SHIPS and forecast advisories.
+  - `docs/data/atlas-forecast-v1.json` is the forecast feed: per active system, the NHC forecast
+    advisory, NHC's GIS cone and the ATCF guidance family runs as first seen by the capture, with
+    the disagreement watch's newest verdict per public coast exposure. It is updated after each
+    capture, only when its bytes change, and only if it passes the gates below.
 - `src/` is the Atlas source. `docs/dist/` is built from it by `scripts/build-atlas.mjs`.
 - `scripts/` holds the refresh, the build and the gates.
 
 ## Gates
 
-- `scripts/test-public-schema.mjs`: every field in the two live files must be in the approved schema.
+- `scripts/test-public-schema.mjs`: every field in the three live files must be in the approved schema.
 - `scripts/scan-public.mjs`: a forbidden-string scan of the site (and, with `--repo`, of the whole
   repository). Exceptions are listed one by one in `scripts/scan-allowlist.json`.
 - `scripts/stage.sh` stages the site in the layout the Atlas gates expect. See

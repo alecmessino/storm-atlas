@@ -128,48 +128,6 @@
    "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
   },
   {
-   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
-   "term": "edge",
-   "word": "edges",
-   "reason": "coastline polygon edge counts in the provenance drawer"
-  },
-  {
-   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
-   "term": "edge",
-   "word": "boundary_edges",
-   "reason": "coastline polygon edge counts in the provenance drawer"
-  },
-  {
-   "path": "^docs/dist/chunk-D3Q3OIWX\\.js$",
-   "term": "edge",
-   "word": "shared_edges",
-   "reason": "coastline polygon edge counts in the provenance drawer"
-  },
-  {
-   "path": "^docs/dist/chunk-OFQ3ZGWN\\.js$",
-   "term": "edge",
-   "word": "ledger",
-   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
-  },
-  {
-   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
-   "term": "edge",
-   "word": "ledger",
-   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
-  },
-  {
-   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
-   "term": "edge",
-   "word": "calibrationledger",
-   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
-  },
-  {
-   "path": "^docs/dist/chunk-TNUTPVSD\\.js$",
-   "term": "edge",
-   "word": "data-ledger-scope",
-   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
-  },
-  {
    "path": "^docs/vendor/leaflet\\.js$",
    "term": "edge",
    "word": "edge",
@@ -324,6 +282,150 @@
    "term": "market",
    "word": "marketing",
    "reason": "English 'marketing' in a comment about honest calibration pages"
+  },
+  {
+   "path": "^docs/atlas\\.css$",
+   "term": "edge",
+   "word": "data-ledger-column",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "data-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "data-ledger-col",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "data-ledger-column",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/atlas\\.js$",
+   "term": "edge",
+   "word": "data-ledger-n",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk\\-27W6BGQU\\.js$",
+   "term": "edge",
+   "word": "boundary_edges",
+   "reason": "coastline geometry: the edges of the land-union polygon the landfall rule tests against"
+  },
+  {
+   "path": "^docs/dist/chunk\\-27W6BGQU\\.js$",
+   "term": "edge",
+   "word": "edges",
+   "reason": "coastline geometry: the edges of the land-union polygon the landfall rule tests against"
+  },
+  {
+   "path": "^docs/dist/chunk\\-27W6BGQU\\.js$",
+   "term": "edge",
+   "word": "shared_edges",
+   "reason": "coastline geometry: the edges of the land-union polygon the landfall rule tests against"
+  },
+  {
+   "path": "^docs/dist/chunk\\-AUMRHDRY\\.js$",
+   "term": "edge",
+   "word": "calibrationledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk\\-AUMRHDRY\\.js$",
+   "term": "edge",
+   "word": "data-ledger-estimator",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk\\-AUMRHDRY\\.js$",
+   "term": "edge",
+   "word": "data-ledger-scope",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk\\-AUMRHDRY\\.js$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^docs/dist/chunk\\-LWDEP5PG\\.js$",
+   "term": "edge",
+   "word": "ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/engine/analogs\\.js$",
+   "term": "edge",
+   "word": "knowledge",
+   "reason": "English word (knowledge), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/atlas\\.jsx$",
+   "term": "edge",
+   "word": "ledgercolumn",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/atlas\\.jsx$",
+   "term": "edge",
+   "word": "setledgercolumn",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/calibration\\.jsx$",
+   "term": "edge",
+   "word": "data-ledger-estimator",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/ledger\\.jsx$",
+   "term": "edge",
+   "word": "data-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/ledger\\.jsx$",
+   "term": "edge",
+   "word": "data-ledger-col",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/ledger\\.jsx$",
+   "term": "edge",
+   "word": "data-ledger-column",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/ledger\\.jsx$",
+   "term": "edge",
+   "word": "data-ledger-n",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^src/ui/ledger\\.jsx$",
+   "term": "edge",
+   "word": "ledgerrow",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^scripts/check-atlas-instrument\\.mjs$",
+   "term": "edge",
+   "word": "data-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
+  },
+  {
+   "path": "^scripts/check-atlas-states\\.mjs$",
+   "term": "edge",
+   "word": "data-ledger",
+   "reason": "the Atlas's own calibration/evidence ledger (a table of its backtest), not trading vocabulary"
   }
  ]
 }

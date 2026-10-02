@@ -264,7 +264,8 @@ export const OUTCOME_ANY = "went on to any outcome";
  * The whole cohort as one grammatical sentence, with no trailing question.
  *
  * THE CLOSED FORM IS STILL THE DEFAULT, AND THE REASON IS NOT TASTE. This sentence is quoted by
- * more than the Atlas: frozen research documents quote it, byte-checked against a pinned archive.
+ * more than the Atlas: another surface publishes it as the lead of its historical-record
+ * section, frozen against a pinned archive and byte-checked.
  * Writing the unset sides into every caller's sentence would re-publish a frozen research
  * document to satisfy a layout, which is the wrong way round. So the open form is a named
  * OPTION on the one assembler rather than a second assembler: one grammar, one set of branches,
@@ -429,8 +430,8 @@ const TAIL = { text: " — what happened next?", zone: null, key: null };
  *
  * This is the ONE reading the Atlas surface publishes: the question line renders these segments
  * and the citation quotes their join, so the sentence a reader presses and the sentence they
- * would paste are the same characters. Every other consumer of a cohort sentence -- a frozen
- * research document above all -- keeps the closed form, which is why this is a separate entry point rather than a
+ * would paste are the same characters. Every other consumer of a cohort sentence -- the frozen
+ * record above all -- keeps the closed form, which is why this is a separate entry point rather than a
  * new default.
  */
 export function questionSegmentsOf(spec, parts) {

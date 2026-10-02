@@ -13,10 +13,11 @@
 
 import React from "react";
 import { loadArchive } from "../engine/archive.js";
+import { methodologyMoved } from "../engine/methodology.js";
 import { fetchCoastlines, fetchContext } from "../engine/coastlines.js";
 import { genesisDensity, getAnalogs, pathwayDensity } from "../engine/analogs.js";
-import { brushMembers, buildCellIndex, cellAt, cellIndex, genesisMembers, keyOfCell, maskOf,
-  pathwayMembers } from "../engine/cells.js";
+import { brushMembers, buildCellIndex, cellAt, cellIndex, cornerOfCell, genesisMembers, keyOfCell,
+  maskOf, pathwayMembers } from "../engine/cells.js";
 import { filterStorms, genesisBounds, seasonRange } from "../engine/query.js";
 import {
   EMPTY_COHORT, cohortResult, conditionsOf, normalise, parentOf, parseQuery, sameCohort,
@@ -29,7 +30,6 @@ import {
    their join, so the sentence a reader presses and the one they would paste are the same
    characters. Every other consumer of a cohort sentence keeps the closed form. */
 import { openQuestion, questionSegmentsOf } from "../engine/cohort-language.js";
-import { activeAt, advance, buildTimeline, fromActive, toActive } from "../engine/timeline.js";
 import { projectWorld } from "../render/atlas-layer.js";
 import { previewCounts } from "../engine/preview.js";
 import { changedKeyOf, compareResults } from "../engine/compare.js";
@@ -43,8 +43,8 @@ import { loadCalibration } from "../engine/calibration.js";
 import {
   LIVE_OPERATIONAL, categoryLadder, liveStateFor, loadLive, operationalLifecycle,
   operationalView, shortfall, sourceDisagreement,
-  rowOfAtcfId,
-  isNewerVintage, loadOfficialForecast,
+  atcfResolution,
+  isNewerVintage, loadForecast, officialFromForecast,
 } from "../engine/live.js";
 /* THE HISTORICAL HALF OF THE FORWARD VIEW, and it is on this side of the wall. `forward.js`
    imports no operational module and has no parameter a forecast could arrive through: it takes
@@ -55,17 +55,21 @@ import { MIN_SAMPLE as FORWARD_MIN_SAMPLE, alignToGenesis, forwardDistribution,
   thresholdTiming } from "../engine/forward.js";
 import { AtlasMap } from "./map.jsx";
 import { haversineKm } from "../engine/geo.js";
-import { ActiveSystems } from "./active-systems.jsx";
+import { LiveStrip } from "./active-systems.jsx";
 import { CohortBuilder } from "./cohort-builder.jsx";
 import { StormPanel } from "./storm-panel.jsx";
 import { EnvLens } from "./env-lens.jsx";
 /* THE INSTRUMENT'S OWN PARTS. */
 import { Colophon } from "./shell.jsx";
 import { QueryHead } from "./condition-strip.jsx";
-import { EvidenceDeck, buildGroups, subjectVerdicts } from "./evidence-deck.jsx";
-import { AnswerLadder } from "./answer-ladder.jsx";
+import { EvidenceRecord, buildGroups, subjectVerdicts } from "./evidence-deck.jsx";
+import { Ledger } from "./ledger.jsx";
+import { Roster } from "./roster.jsx";
+import { SealPanel, ReadingsPanel, SealCheck } from "./seal.jsx";
+import { fingerprintOf, shortFingerprint } from "../engine/seal.js";
 import { Transport } from "./transport.jsx";
-import { ArchiveTransport } from "./archive-transport.jsx";
+import { PickCard } from "./pick.jsx";
+import { CATEGORY_COLOR, LANDFALL_INK } from "../render/palette.js";
 import { MONO, Note, TextButton, claimText } from "./kit.jsx";
 
 /* Split out of the entry chunk. The drawer is reached by a button or the P key, never on the
@@ -90,7 +94,92 @@ const ForwardOutcome = React.lazy(() =>
   import("./forward-outcome.jsx").then((m) => ({ default: m.ForwardOutcome })));
 
 const DATA_BASE = "data";
+
+/* DOES A PUBLISHED LINE CROSS ONE 2° CELL?
+ *
+ * The archive counts a storm as passing through a cell when one of its fixes falls in it, and its
+ * fixes are six-hourly. A forecast's points are twelve to twenty-four hours apart and would step
+ * straight over a cell the line plainly crosses, so a forecast line is tested along its length
+ * (straight in latitude and longitude between published points, sampled every 0.2°). Nothing is
+ * weighted and nothing is turned into a chance: each line crosses or it does not. */
+function lineCrossesCell(pts, c, step) {
+  const inside = (la, lo) => {
+    const w = ((((lo + 180) % 360) + 360) % 360) - 180;
+    return la >= c.lat && la < c.lat + step && w >= c.lon && w < c.lon + step;
+  };
+  for (let i = 0; i < pts.length; i++) {
+    if (inside(pts[i][0], pts[i][1])) return true;
+    if (!i) continue;
+    const [a0, b0] = pts[i - 1];
+    const [a1, b1] = pts[i];
+    const n = Math.ceil(Math.max(Math.abs(a1 - a0), Math.abs(b1 - b0)) / 0.2);
+    for (let k = 1; k < n; k++) {
+      if (inside(a0 + ((a1 - a0) * k) / n, b0 + ((b1 - b0) * k) / n)) return true;
+    }
+  }
+  return false;
+}
+function liveInCell(ov, corner, step) {
+  if (!ov || !corner) return null;
+  return {
+    name: ov.name || ov.atcf_id,
+    advisory: ov.advisory,
+    official: ov.official.length ? lineCrossesCell(ov.official.map((p) => [p.lat, p.lon]), corner, step) : null,
+    runs: ov.runs.filter((r) => lineCrossesCell(r, corner, step)).length,
+    runsOf: ov.runs.length,
+    cycle: ov.cycle,
+    best: ov.best.length ? lineCrossesCell(ov.best.map((f) => [f.lat, f.lon]), corner, step) : false,
+  };
+}
+
+/* WHAT THE LIVE CARD PRINTS ABOUT A SYSTEM'S FORECAST AND THE WATCH, as plain values.
+ *
+ * The forecast layer is carried, not computed: every field here is copied from
+ * atlas-forecast-v1.json, and every watch verdict is the watch's own row as the runner wrote it.
+ * The only thing done here is sorting the rows into what needs a reader's eye (ELEVATED and
+ * above), what the watch REFUSED to judge (INSUFFICIENT, with its reason), and what is quiet. */
+const WATCH_ALERT = new Set(["ELEVATED", "DISAGREEMENT", "EVIDENCE CASE"]);
+function forecastSummary(layer, atcfId) {
+  if (!layer) return { state: "loading" };
+  if (!layer.ok) return { state: "unavailable", error: layer.error };
+  const rec = Object.prototype.hasOwnProperty.call(layer.storms, atcfId) ? layer.storms[atcfId] : null;
+  if (!rec) return { state: "absent" };
+  if (!rec.ok) return { state: "none", error: rec.error };
+  const g = rec.guidance || {};
+  const ms = (z) => { const t = Date.parse(z || ""); return Number.isFinite(t) ? t : null; };
+  const w = rec.watch;
+  return {
+    state: "ok",
+    advisory: rec.advisory, issued: ms(rec.issued), firstSeen: ms(rec.source && rec.source.first_seen),
+    knownAt: ms(rec.known_at), points: (rec.trackPoints || []).length,
+    cone: rec.cone ? { kind: rec.cone.kind, advisory: rec.cone.advisory, matches: rec.cone.matches_tcm } : null,
+    guidance: { cycle: g.cycle || null, ageH: g.age_h, runs: (g.runs || []).length,
+      families: (g.runs || []).length + (g.missing || []).length, missing: g.missing || [],
+      stale: g.stale || [], members: g.member_count || 0 },
+    watchSupplied: !!(layer.watch && layer.watch.supplied),
+    watch: w ? {
+      engine: w.engine, asOf: ms(w.as_of), current: !!w.evaluated_this_state, worst: w.worst,
+      alerts: w.rows.filter((r) => WATCH_ALERT.has(r.state)).map((r) => ({ id: r.geometry, label: r.label,
+        state: r.state, kind: r.provenance_kind, leadH: r.lead_h,
+        reasons: r.reasons.map((x) => x.text) })),
+      refused: w.rows.filter((r) => r.state === "INSUFFICIENT").map((r) => ({ label: r.label,
+        reason: r.reasons.length ? r.reasons[0].text : null })),
+      quiet: w.rows.filter((r) => r.state === "QUIET").map((r) => r.label),
+    } : null,
+  };
+}
 const DEFAULT_RADIUS_KM = 500;
+
+/* THE ARCHIVE'S IDENTITY IN A CITATION, AND WHY IT IS NOT THE PACK STAMP ALONE.
+   `archive_stamp` moves on every ingest -- seven times over an archive that had not changed, as
+   test-atlas-cohort-identity.mjs records -- so a citation carrying only the stamp said two
+   identical readings came from different data. `cohort_archive_id` hashes the tables a cohort is
+   answered from and moves only when they do; the stamp stays beside it because the pack is still
+   the file the reader downloaded. */
+export const archiveIdOf = (manifest) => {
+  const id = manifest && manifest.provenance && manifest.provenance.cohort_archive_id;
+  return id ? `ARCHIVE ${String(id).slice(0, 16)} · ` : "";
+};
 
 /* The radius a bridged cohort inherits: whatever the reader already chose, and otherwise the
    same default a probe click applies. Stated here rather than inside the bridge so the surface
@@ -168,6 +257,16 @@ export function Atlas() {
      The two are deliberately different values, because a panel that cannot tell them apart is a
      panel that would show a stub as current truth during the second the file is in flight. */
   const [live, setLive] = React.useState(null);
+  /* THE FORECAST LAYER (atlas-forecast-v1.json): the advisory, cone, guidance and watch verdict
+     per active system, from the capture. Same null-vs-failed distinction as `live`. */
+  const [forecast, setForecast] = React.useState(null);
+  /* THIS BROWSER'S CLOCK, for one purpose: how old the feed is. Ticked every five minutes so a
+     page left open does not keep saying LIVE over a file that has stopped being rewritten. */
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 300000);
+    return () => clearInterval(t);
+  }, []);
   const [cal, setCal] = React.useState(null);
   const [calError, setCalError] = React.useState(null);
   /* THE METHODOLOGY A SHARED LINK WAS MADE UNDER. A cohort URL carries `v`, which versions the
@@ -219,13 +318,31 @@ export function Atlas() {
   const [plateMode, setPlateMode] = React.useState("pathway");
   const showPathway = plateMode === "pathway";
   const showGenesisDensity = plateMode === "genesis";
-  const [playing, setPlaying] = React.useState(false);
+  /* THE STORM'S OWN CLOCK. The archive replay that shared this flag is gone; the transport is
+     the one clock on the surface and it belongs to the selected storm. */
+  const [stormPlaying, setStormPlaying] = React.useState(false);
   const [cursorMs, setCursorMs] = React.useState(null);
-  /* "explore" is the map as a finished record; "replay" unfolds it in time. The filters drive
-     both unchanged, which is what makes "watch only the majors" or "watch only the storms that
-     hit Mexico" come for free rather than needing their own controls. */
-  const [mode, setMode] = React.useState("explore");
-  const [replayCursorMin, setReplayCursorMin] = React.useState(null);
+  /* THE INSPECTOR'S THREE VIEWS OF ONE ANSWER. OUTCOMES is the ledger; STORMS is the roster of
+     the storms behind it; RECORD is the selected storm's own record. View state only: which tab
+     is showing changes nothing a reader could cite. */
+  const [tab, setTab] = React.useState("outcomes");
+  /* WHAT THE ROSTER LISTS WHEN IT IS NOT THE WHOLE COHORT: a ledger row's members, or the storms
+     through one plate cell. Always an engine member set, never re-derived here. */
+  const [rosterSource, setRosterSource] = React.useState(null);
+  /* ONE STORM LIFTED FROM THE ROSTER, WHILE THE POINTER IS ON ITS NAME. */
+  const [hoverStorm, setHoverStorm] = React.useState(null);
+  /* A STORM LIFTED FROM THE ROSTER OR THE PICK CARD IS A HOVER, AND A HOVER ENDS WITH ITS SOURCE.
+     It used to survive a keyboard lift and a tab switch, and since it outranks the ledger's lens
+     the plate then drew one unrelated storm while a held row said "N storms drawn on the plate". */
+  React.useEffect(() => { setHoverStorm(null); }, [tab]);
+  /* THE PICK: where the reader clicked open water, and what is there. */
+  const [pick, setPick] = React.useState(null);
+  React.useEffect(() => { if (!pick) setHoverStorm(null); }, [pick]);
+  const [sealOpen, setSealOpen] = React.useState(false);
+  const [readingsOpen, setReadingsOpen] = React.useState(false);
+  /* WHAT THE LEDGER'S RIGHT-HAND COLUMN CARRIES: the difference from the baseline, or hours. */
+  const [ledgerColumn, setLedgerColumn] = React.useState("delta");
+  const [urlSeal] = React.useState(() => new URLSearchParams(location.search).get("seal"));
   const [provOpen, setProvOpen] = React.useState(false);
   const [view, setView] = React.useState(null);
 
@@ -277,8 +394,10 @@ export function Atlas() {
    * Both are read off the rendered boxes rather than written as constants, so neither can go
    * stale: the sheet is placed against the question and the plate a reader is actually looking
    * at. It stays absolutely positioned and moves neither. */
-  const openEditor = React.useCallback((zone, el) => {
+  const [sheetSection, setSheetSection] = React.useState(null);
+  const openEditor = React.useCallback((zone, el, section = null) => {
     anchorRef.current = el || null;
+    setSheetSection(section);
     const shell = shellRef.current;
     const q = document.querySelector("[data-question]");
     const plate = document.querySelector(".at-plate");
@@ -307,10 +426,24 @@ export function Atlas() {
      of the document costs a keyboard reader their place in the sentence. */
   const closeEditor = React.useCallback(() => {
     setSheetZone(null);
+    setSheetSection(null);
     const el = anchorRef.current;
     anchorRef.current = null;
     if (el && el.isConnected) el.focus();
   }, []);
+
+  /* THE EDITOR TAKES FOCUS WHEN IT OPENS. It is a dialog, and focus left on the clause that
+     opened it meant a keyboard reader's next Tab walked the question instead of the editor. A
+     section request focuses its own first control (CohortBuilder); otherwise the first control
+     in the sheet takes it. */
+  React.useEffect(() => {
+    if (!sheetZone || sheetSection) return undefined;
+    const t = setTimeout(() => {
+      const b = document.querySelector("[data-builder-sheet] .at-sheet-body button");
+      if (b) b.focus({ preventScroll: true });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [sheetZone, sheetSection]);
 
   /* THE TWO DURATION COLUMNS FOLD BELOW 1440, and the fold is measured rather than assumed:
      the deck asks the viewport directly instead of a breakpoint guess, because the columns it
@@ -342,7 +475,6 @@ export function Atlas() {
       globalThis.__ATLAS_QUERY = { filterStorms, seasonRange, genesisBounds };
       globalThis.__ATLAS_COHORT = { cohortResult, previewCounts, normalise, parentOf, toQuery,
         whyMatched, contributionOf, bridgeSpec };
-      globalThis.__ATLAS_TIMELINE = { buildTimeline, advance, activeAt, fromActive, toActive };
       globalThis.__ATLAS_PROJECT = projectWorld;
       /* THE COASTLINE COMES AFTER THE TRACKS, DELIBERATELY. It is the geometry the landfall
          rule tests against and it is the plate's authoritative line, but it is 226 KB and the
@@ -379,6 +511,15 @@ export function Atlas() {
       setLive(l);
       globalThis.__ATLAS_LIVE = l;
     });
+    /* THE FORECAST LAYER, ALSO IN PARALLEL AND NEVER AWAITED. About 17 KB gzipped. It is read
+       up front rather than on a press because a DISAGREEMENT the watch has found must be on the
+       top bar without anyone asking for it. It cannot fail the archive: `loadForecast` resolves
+       to an object that says it failed. */
+    loadForecast(DATA_BASE).then((f) => {
+      if (cancelled) return;
+      setForecast(f);
+      globalThis.__ATLAS_FORECAST = f;
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -398,12 +539,12 @@ export function Atlas() {
       const row = rowOfStormId.get(urlStorm);
       /* An id this pack does not hold is dropped rather than guessed at. The cohort in the same
          URL still opens, which is the half of the link that carries the question. */
-      if (row !== undefined) { setSelected(row); return; }
+      if (row !== undefined) { setSelected(row); setTab("record"); return; }
     }
     if (urlAtcf) {
-      const row = rowOfAtcfId(archive, urlAtcf);
-      if (row !== null) setSelected(row);
-      setUrlAtcfState(row !== null ? "resolved" : "missing");
+      const res = atcfResolution(archive, urlAtcf);
+      if (res.row !== null) { setSelected(res.row); setTab("record"); }
+      setUrlAtcfState(res.reason);
     }
   }, [archive, rowOfStormId, urlStorm, urlAtcf, urlStormResolved]);
 
@@ -489,10 +630,11 @@ export function Atlas() {
         separationHours: (latestT - fromT) / 3600000,
         cohortRadiusKm: radiusFor(cohort),
         drops,
+        fc: forecastSummary(forecast, rec.atcf_id),
       });
     }
     return out;
-  }, [archive, live, cohort]);
+  }, [archive, live, cohort, forecast]);
 
   /* WHICH SYSTEM THE COHORT ON SCREEN IS ALREADY KEYED TO, so the launcher can say so rather
      than offering a click that changes nothing. Compared on the DERIVED GENESIS point at the
@@ -518,14 +660,18 @@ export function Atlas() {
      since the PREVIOUS population is not recoverable from the current spec. */
   const [openGroups, setOpenGroups] = React.useState({});
   const [lastEdit, setLastEdit] = React.useState(null);
+  const lastChangedRef = React.useRef(null);
+  lastChangedRef.current = lastChanged;
   const keptRef = React.useRef(null);
   const specRef = React.useRef(null);
   React.useEffect(() => {
     if (!result) return;
     const key = JSON.stringify(cohort);
-    if (specRef.current !== null && specRef.current !== key && keptRef.current !== null
-        && keptRef.current !== result.kept) {
-      setLastEdit({ from: keptRef.current, to: result.kept });
+    /* EVERY SPEC CHANGE IS AN EDIT, INCLUDING ONE THAT MOVED NO STORM, and the edit carries
+       the key that made it. Updating only when the count moved let a no-op NAMED toggle inherit
+       the previous edit's "121 → 24" under its own name. */
+    if (specRef.current !== null && specRef.current !== key && keptRef.current !== null) {
+      setLastEdit({ from: keptRef.current, to: result.kept, key: lastChangedRef.current });
     }
     specRef.current = key;
     keptRef.current = result.kept;
@@ -538,12 +684,14 @@ export function Atlas() {
      state rather than a block explaining that nothing has happened yet. */
   const whatChanged = React.useMemo(() => {
     if (!lastEdit || lastEdit.from === null || lastEdit.to === null) return null;
-    const cond = conditionsOf(cohort).find((x) => x.key === lastChanged);
+    const cond = conditionsOf(cohort).find((x) => x.key === lastEdit.key);
     return {
       edit: `${cond ? cond.label : "THE COHORT"} · `
-        + `${lastEdit.from.toLocaleString()} → ${lastEdit.to.toLocaleString()} storms`,
+        + (lastEdit.from === lastEdit.to
+          ? `no storm changed · ${lastEdit.to.toLocaleString()} storms`
+          : `${lastEdit.from.toLocaleString()} → ${lastEdit.to.toLocaleString()} storms`),
     };
-  }, [lastEdit, cohort, lastChanged]);
+  }, [lastEdit, cohort]);
 
   const [envLoading, setEnvLoading] = React.useState(false);
   const [envEpoch, setEnvEpoch] = React.useState(0);
@@ -588,24 +736,35 @@ export function Atlas() {
   }, [brush, archive, result]);
 
   const lens = React.useMemo(() => {
+    /* ONE STORM FROM THE ROSTER OR THE PICK CARD, WHILE THE POINTER IS ON ITS NAME. The same lens
+       a ledger row uses, holding one row -- so the plate draws that storm alone over its cohort
+       exactly the way it draws a contract's members. */
+    if (hoverStorm !== null && archive) {
+      const nm = archive.storms.str("name", hoverStorm) || "UNNAMED";
+      return { key: "__storm__", label: `${nm} ${archive.storms.num("season", hoverStorm)}`,
+        rows: [hoverStorm], count: null, denom: null, held: false, ink: "#ffffff", single: true };
+    }
     const key = hoverRow || heldRow;
     if (!key || !result) return brushLens;
     for (const g of buildGroups(result, comparison, null)) {
       for (const row of g.rows) {
         if (row.key !== key) continue;
         if (!row.memberRows || !row.memberRows.length) return null;
-        return { key, label: row.label, rows: row.memberRows,
+        return { key, label: row.label, rows: row.memberRows, ink: lensInkOf(key),
           count: row.cell ? row.cell.count : row.memberRows.length,
           denom: row.cell ? row.cell.n_storms : null, held: key === heldRow };
       }
     }
     return brushLens;
-  }, [hoverRow, heldRow, result, comparison, brushLens]);
+  }, [hoverRow, heldRow, result, comparison, brushLens, hoverStorm, archive]);
 
   /* A COHORT EDIT RELEASES THE HOLD. The row a reader held is a row of the previous answer; a new
      cohort re-publishes every contract, and keeping the key would lift a set the ladder is no
      longer showing. The camera, the selection and the mode are untouched. */
-  React.useEffect(() => { setHeldRow(null); setHoverRow(null); setBrush(null); }, [cohort]);
+  React.useEffect(() => {
+    setHeldRow(null); setHoverRow(null); setBrush(null);
+    setRosterSource(null); setPick(null); setHoverStorm(null);
+  }, [cohort]);
 
   /* MEMOISED, and that is not a micro-optimisation. `Archive.storm(i)` allocates -- it is marked
      "not for hot loops" where it is defined -- and everything the operational join derives hangs
@@ -705,22 +864,28 @@ export function Atlas() {
     return genesisDensity(archive, result.rows, 2.0);
   }, [archive, result, showGenesisDensity]);
 
-  /* The replay clock, built from whatever the filter currently selects. Rebuilt on a filter
-     change on purpose: a run is over a population, and changing the population is a new run. */
-  const timeline = React.useMemo(
-    () => (archive && result && mode === "replay" ? buildTimeline(archive, result.rows) : null),
-    [archive, result, mode]);
-
+  /* THE COHORT IS THE ADDRESS BAR, AND BACK UNDOES A QUESTION.
+     A scenario is a URL in this architecture -- shareable, bookmarkable and diffable with no
+     server at all -- so the spec is written back on every change. A change to the COHORT is a
+     history entry (pushState): it is a committed question, and a reader who removed a condition
+     by accident gets it back with Back. Everything else the bar carries -- the selection, the
+     surface, the ledger anchor -- replaces the current entry, because looking at a storm is not a
+     new question. The year box drafts and commits on blur, so typing is one entry, not four. */
+  const lastCohortQ = React.useRef(null);
+  const fromPop = React.useRef(false);
+  const [initialCohortQ] = React.useState(() => toQuery(parseQuery(location.search).spec).toString());
+  const sealLive = !!urlSeal && toQuery(cohort).toString() === initialCohortQ;
+  const liveFp = React.useMemo(
+    () => (archive && result ? shortFingerprint(fingerprintOf(archive, result.rows)) : ""),
+    [archive, result]);
   React.useEffect(() => {
-    if (mode !== "replay") { setPlaying(false); return; }
-    setReplayCursorMin(timeline && timeline.n ? timeline.firstT : null);
-  }, [mode, timeline]);
-
-  /* THE COHORT IS THE ADDRESS BAR. A scenario is a URL in this architecture -- shareable,
-     bookmarkable and diffable with no server at all -- so the spec is written back on every
-     change. replaceState rather than pushState: building a query is one continuous act, and
-     filling the back button with twelve half-formed cohorts would make Back useless for
-     leaving the page. */
+    const onPop = () => {
+      fromPop.current = true;
+      setCohort(parseQuery(location.search).spec);
+    };
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, [setCohort]);
   React.useEffect(() => {
     /* NOT BEFORE THE PACK LANDS. `storm` and `m` are both guarded on `archive`, so running this
        on the first commit rewrote the address bar WITHOUT them -- the shared link's storm id was
@@ -748,10 +913,24 @@ export function Atlas() {
     /* The selection travels with the link, so a bridged view can be sent to another analyst as
        the thing it is: this storm, against this cohort. */
     if (archive && selected !== null) p.set("storm", archive.storms.str("storm_id", selected));
+    /* THE BRIDGE'S ID SURVIVES THE FIRST WRITE. `atcf` is a reserved surface key, and when it did
+       not resolve to a row it is the only thing in the link that says which live storm the
+       reader came from -- erasing it made a copied link lose the storm and its notice. A resolved
+       id travels as `storm=` instead, which names the archive's own row. */
+    if (urlAtcf && urlAtcfState && urlAtcfState !== "resolved") p.set("atcf", urlAtcf);
+    /* THE SEAL TRAVELS WHILE IT STILL DESCRIBES THE COHORT ON SCREEN, and not a moment longer:
+       a fingerprint left on a link after its cohort changed would check the wrong population. */
+    if (sealLive) p.set("seal", urlSeal);
     const q = p.toString();
     const next = q ? `?${q}` : location.pathname;
-    if (location.search.replace(/^\?/, "") !== q) history.replaceState(null, "", next);
-  }, [cohort, surface, ledgerAnchor, archive, selected]);
+    const cq = toQuery(cohort).toString();
+    const push = lastCohortQ.current !== null && lastCohortQ.current !== cq && !fromPop.current;
+    lastCohortQ.current = cq;
+    fromPop.current = false;
+    if (location.search.replace(/^\?/, "") === q) return;
+    if (push) history.pushState(null, "", next);
+    else history.replaceState(null, "", next);
+  }, [cohort, surface, ledgerAnchor, archive, selected, urlAtcf, urlAtcfState, sealLive, urlSeal]);
 
   /* The ledger's 16 KB is fetched only when the ledger is opened. Nothing on the tactical
      surface needs it, and a reader who never asks the question should not pay for the answer. */
@@ -795,7 +974,7 @@ export function Atlas() {
     return `STORM ATLAS · ${s.str("name", selected) || "UNNAMED"} ${s.num("season", selected)} `
       + `(${s.str("storm_id", selected)}) · AGAINST ${openQuestion(cohort).replace(/ — what happened next\?$/, "")} `
       + `· ${result.kept.toLocaleString()} of ${m.counts.storms.toLocaleString()} storms · `
-      + `METHODOLOGY ${m.methodology_version} · PACK ${(m.provenance || {}).archive_stamp}`;
+      + `METHODOLOGY ${m.methodology_version} · ${archiveIdOf(m)}PACK ${(m.provenance || {}).archive_stamp}`;
   }, [archive, selected, result, cohort]);
 
   const citation = React.useMemo(() => {
@@ -803,7 +982,7 @@ export function Atlas() {
     const m = archive.manifest;
     return `STORM ATLAS · ${openQuestion(cohort).replace(/ — what happened next\?$/, "")} · `
       + `${result.kept.toLocaleString()} of ${m.counts.storms.toLocaleString()} storms · `
-      + `METHODOLOGY ${m.methodology_version} · PACK ${(m.provenance || {}).archive_stamp}`;
+      + `METHODOLOGY ${m.methodology_version} · ${archiveIdOf(m)}PACK ${(m.provenance || {}).archive_stamp}`;
   }, [archive, result, cohort]);
 
   /* THE BRIDGE'S OWN FACTS, memoised on (storm, cohort) because whyMatched runs one filter pass
@@ -841,10 +1020,15 @@ export function Atlas() {
     setSelected(null);
   }, []);
 
-  const selectStorm = React.useCallback((row) => {
+  /* SELECTING A STORM OPENS ITS RECORD -- unless the reader is working down the roster, where
+     the list is the thing they are using and the record is one press away on the strip above it. */
+  const selectStorm = React.useCallback((row, { keepTab = false } = {}) => {
     setSelected(row);
+    if (!keepTab && row !== null) setTab("record");
+    setPick(null);
+    setHoverStorm(null);
     setCursorMs(null);
-    setPlaying(false);
+    setStormPlaying(false);
     setInteracted(true);
   }, []);
 
@@ -884,7 +1068,7 @@ export function Atlas() {
     if (!archive || row === null) return;
     const b = bridgeSpec(archive, cohort, row, { radiusKm: radiusFor(cohort) });
     if (!b) return;
-    setPlaying(false);
+    setStormPlaying(false);
     setCursorMs(null);
     setCohort(b.spec);
   }, [archive, cohort, setCohort]);
@@ -918,7 +1102,7 @@ export function Atlas() {
     });
     if (!spec) return;
     setSelected(null);
-    setPlaying(false);
+    setStormPlaying(false);
     setCursorMs(null);
     setInteracted(true);
     /* THE BASELINE IS THE ARCHIVE, SAID EXPLICITLY. A launched cohort carries exactly one
@@ -938,12 +1122,11 @@ export function Atlas() {
    * crosses between them is a list of `{ validMs, kt }` pairs -- two numbers per point, one of
    * them an absolute instant.
    *
-   * READ ON A GESTURE, NEVER ON A PAINT. `latest.json` is 1,088,528 bytes raw and 80,726
-   * gzipped, which is 5.8% of the Atlas critical path and none of it needed to draw a map. It is
-   * also outside the gated pack budget entirely, because it is the forecast payload and not
-   * this artifact's. So it is fetched when a reader asks for it, on a cohort that is already
-   * keyed to a live system's derived genesis, and `loadOfficialForecast` fails open: the archive
-   * is complete without it and must not grow a hole where it would have been.
+   * READ UP FRONT, LAID ON THE LAUNCH. The forecast file (atlas-forecast-v1.json, from the
+   * capture) is about 17 KB gzipped and is loaded beside the live artifact, off the
+   * critical path. A launch keyed to a live system's derived genesis lays that system's advisory
+   * against the cohort with no further press. It fails open: the archive is complete without it
+   * and must not grow a hole where it would have been.
    */
   const [official, setOfficial] = React.useState(null);
   const [officialLoading, setOfficialLoading] = React.useState(false);
@@ -963,7 +1146,7 @@ export function Atlas() {
   /**
    * READ THE OFFICIAL FORECAST, AND ACCEPT IT ONLY IF IT IS NOT OLDER THAN WHAT IS HELD.
    *
-   * THE STALE-VINTAGE RULE IS THE WHOLE REASON THIS IS NOT A PLAIN setState. the pipeline's
+   * THE STALE-VINTAGE RULE IS THE WHOLE REASON THIS IS NOT A PLAIN setState. The forecast file's
    * payload is regenerated every ten minutes and its `generatedAt` moves every time; the forecast
    * inside it changes only when NHC issues an advisory. A payload rebuilt from a STALE advisory
    * therefore looks newer than the advisory it carries, and accepting it would walk a reader's
@@ -975,23 +1158,40 @@ export function Atlas() {
    * When a newer advisory IS accepted, nothing recomputes by hand: the alignment below is a memo
    * over these points, so the placement recomputes and the surface says it was superseded.
    */
-  const readOfficial = React.useCallback((atcfId) => {
-    if (!atcfId) return;
-    setOfficialLoading(true);
-    loadOfficialForecast(DATA_BASE, atcfId).then((next) => {
-      setOfficialLoading(false);
-      if (!next) return;
-      setOfficial((prev) => {
-        if (!next.ok) return prev && prev.ok ? prev : next;
-        if (prev && prev.ok && prev.atcf_id === next.atcf_id
-            && !isNewerVintage(prev.vintage, next.vintage)) {
-          return prev;
-        }
-        if (prev && prev.ok) setSupersededAt(next.vintage && next.vintage.advisory_valid_at);
-        return next;
-      });
-    }).catch(() => setOfficialLoading(false));
+  const acceptOfficial = React.useCallback((next) => {
+    if (!next) return;
+    setOfficial((prev) => {
+      if (!next.ok) return prev && prev.ok && prev.atcf_id === next.atcf_id ? prev : next;
+      if (prev && prev.ok && prev.atcf_id === next.atcf_id
+          && !isNewerVintage(prev.vintage, next.vintage)) {
+        return prev;
+      }
+      if (prev && prev.ok && prev.atcf_id === next.atcf_id) {
+        setSupersededAt(next.vintage && next.vintage.advisory_valid_at);
+      }
+      return next;
+    });
   }, []);
+
+  /* NO PRESS BETWEEN A LAUNCH AND ITS FORECAST. The forecast layer is already in memory (it is
+     read up front so the watch can surface on the top bar), so a cohort keyed to a live system's
+     derived genesis gets that system's advisory laid against it at once. The vintage rule above
+     still decides whether a re-read replaces what is held. */
+  React.useEffect(() => {
+    if (!launchedSystem || !forecast) return;
+    acceptOfficial(officialFromForecast(forecast, launchedSystem));
+  }, [launchedSystem, forecast, acceptOfficial]);
+
+  /* THE ONE CONTROL THAT CAN CHANGE THE VINTAGE: re-read the forecast file. A newer advisory
+     replaces the placement through the effect above; an equal-or-older one is refused. */
+  const readOfficial = React.useCallback(() => {
+    setOfficialLoading(true);
+    loadForecast(DATA_BASE).then((f) => {
+      setOfficialLoading(false);
+      if (f && f.ok) { setForecast(f); globalThis.__ATLAS_FORECAST = f; }
+      else if (launchedSystem) acceptOfficial(officialFromForecast(f, launchedSystem));
+    }).catch(() => setOfficialLoading(false));
+  }, [launchedSystem, acceptOfficial]);
 
   /* THE ALIGNMENT. One call, one contract: elapsed time is derived from `validMs - genesisMs`
      inside `alignToGenesis`, and the advisory's own `hr` travels as `label_hr` where nothing
@@ -1052,7 +1252,7 @@ export function Atlas() {
      probe with its own query. That separation was the two-surface problem in miniature. */
   const onProbe = React.useCallback((lat, lon) => {
     setSelected(null);
-    setPlaying(false);
+    setStormPlaying(false);
     setInteracted(true);
     setCohort((c) => normalise({
       ...c, where: { lat, lon, radiusKm: c.where ? c.where.radiusKm : DEFAULT_RADIUS_KM },
@@ -1089,6 +1289,7 @@ export function Atlas() {
        * are visible, deliberate and next to the thing they remove. */
       if (e.key === "Escape") {
         if (sheetZone) { closeEditor(); return; }
+        if (pick) { setPick(null); return; }
         if (provOpen) { setProvOpen(false); return; }
         /* THE HOLD IS DISMISSED BEFORE THE SELECTION, on the same most-recent-first rule the
            drawer and the inspector already follow, and the cohort is still not in the chain. */
@@ -1101,84 +1302,183 @@ export function Atlas() {
          the plate's controls are literally the same call. Neither touches the query. */
       if ((e.key === "h" || e.key === "H") && cameraRef.current) cameraRef.current.home();
       if ((e.key === "f" || e.key === "F") && cameraRef.current) cameraRef.current.fit();
-      if (e.key === " " && (selected !== null || mode === "replay")) {
-        e.preventDefault(); setPlaying((v) => !v);
+      if (e.key === " " && selected !== null && !(e.target && e.target.closest
+        && e.target.closest("button,[role=button]"))) {
+        e.preventDefault(); setStormPlaying((v) => !v);
       }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [selected, mode, provOpen, heldRow, brush, sheetZone, closeEditor]);
+  }, [selected, provOpen, heldRow, brush, sheetZone, closeEditor, pick]);
+
+  /* ── THE INSPECTOR'S ROSTER, THE PICK, THE FRAME AND THE SEAL ──────────────────────────── */
+
+  /* WHAT THE ROSTER LISTS. A ledger row's members are the ENGINE'S member set for that contract
+     -- the array that counted its numerator -- and a plate cell's are the cell index's; the
+     roster prints the set it is handed and says in words what the set is. */
+  const rosterSet = React.useMemo(() => {
+    if (!result) return null;
+    if (rosterSource && rosterSource.kind === "row") {
+      for (const g of buildGroups(result, comparison, null)) {
+        for (const row of g.rows) {
+          if (row.key !== rosterSource.key || !row.memberRows) continue;
+          const what = row.key.startsWith("int:") ? `counted as reaching ${row.label}`
+            : `counted in the ${row.label} landfall row`;
+          return { rows: row.memberRows, label: what,
+            note: row.cell ? `${row.cell.count.toLocaleString()} of ${row.cell.n_storms.toLocaleString()} — the numerator of that row` : null };
+        }
+      }
+    }
+    if (rosterSource && rosterSource.kind === "cell") {
+      return { rows: rosterSource.rows, label: `through the 2° cell at ${rosterSource.where}`,
+        note: "every storm of this cohort with a fix in that cell" };
+    }
+    return { rows: result.rows, label: "in this cohort", whole: true };
+  }, [result, comparison, rosterSource]);
+
+  const onShowMembers = React.useCallback((key) => {
+    setRosterSource({ kind: "row", key });
+    setTab("storms");
+  }, []);
+
+  /* THE LAUNCHED LIVE SYSTEM, FOR THE PLATE: its operational track from derived genesis, the
+     official forecast, NHC's cone, the guidance runs and any exposure the watch flagged -- all
+     copied from the two operational files, none of it computed here (render/forecast-layer.js).
+     Null unless the cohort on screen is keyed to a live system. */
+  const forecastOverlay = React.useMemo(() => {
+    if (!launchedSystem || !live || !live.ok) return null;
+    const rec = live.record(launchedSystem);
+    const sys = activeSystems.find((x) => x.atcf_id === launchedSystem);
+    const fixes = rec && rec.fixes ? rec.fixes : [];
+    const g0 = sys && sys.genesis ? sys.genesis.t : null;
+    const best = fixes.filter((f) => g0 === null || Date.parse(f.t) >= g0)
+      .map((f) => ({ lat: f.lat, lon: f.lon, kt: f.kt }));
+    const fr = forecast && forecast.ok && forecast.storms[launchedSystem] && forecast.storms[launchedSystem].ok
+      ? forecast.storms[launchedSystem] : null;
+    return {
+      atcf_id: launchedSystem,
+      name: sys ? sys.name : null,
+      advisory: fr ? fr.advisory : null,
+      cycle: fr && fr.guidance && fr.guidance.cycle
+        ? `${fr.guidance.cycle.slice(6, 8)}/${fr.guidance.cycle.slice(8, 10)}Z cycle` : null,
+      best,
+      official: fr ? fr.trackPoints.map((p) => ({ lat: p.at[0], lon: p.at[1], kt: p.kt, hr: p.hr })) : [],
+      cone: fr && fr.cone ? fr.cone.rings : null,
+      runs: fr && fr.guidance ? fr.guidance.runs.map((r) => r.track) : [],
+      alerts: fr && fr.watch ? fr.watch.rows.filter((r) => r.outline).map((r) => ({ state: r.state, outline: r.outline })) : [],
+    };
+  }, [launchedSystem, live, forecast, activeSystems]);
+
+  /* THE PICK, COUNTED FROM THE SAME CELL INDEX THE PLATE'S READOUT USES. */
+  const plateBox = React.useRef({ w: 800, h: 500 });
+  const onPick = React.useCallback((lat, lon, pt) => {
+    if (!archive || !result) return;
+    const el = document.querySelector(".at-plate");
+    if (el) { const r = el.getBoundingClientRect(); plateBox.current = { w: r.width, h: r.height }; }
+    const index = cellIndex(archive, 2.0);
+    const cell = cellAt(index, lat, lon);
+    const ok = cell >= 0 && cell < index.starts.length - 1;
+    const through = ok ? pathwayMembers(index, cell, maskOf(archive.nStorms, result.rows)) : [];
+    const formed = ok ? genesisMembers(archive, index, cell, result.rows) : [];
+    /* THE SAME CELL, ASKED OF THE LIVE SYSTEM. With a cohort keyed to a live storm, the reader's
+       cell is answered twice in one card: how many of the cohort's storms passed through it
+       (history) and which of the storm's published lines cross it (forecast). Counts both. */
+    const liveHere = ok && forecastOverlay && selected === null
+      ? liveInCell(forecastOverlay, cornerOfCell(index, cell), index.step) : null;
+    setPick({ lat, lon, x: pt.x, y: pt.y, through, formed, live: liveHere });
+    setInteracted(true);
+  }, [archive, result, forecastOverlay, selected]);
+
+  /* THE FRAME A COMMITTED QUESTION ASKS FOR -- see autoFrame in map.jsx.
+     ONLY A QUESTION ABOUT PLACE MOVES THE MAP. "Formed near here", "formed in this basin" and
+     "entered this sub-basin" name a geography, and the plate going there is the answer being
+     shown. An intensity, season, month, landfall or scope condition names no place: its cohort
+     is spread over the same ocean as the archive, and framing it would move the camera for a
+     question that did not ask to look anywhere new. Those leave the plate where it is. */
+  const autoFrame = React.useMemo(() => {
+    if (!archive || !result) return null;
+    /* KEYED ON THE PLACE ALONE, so adding "reached cat 3" to "formed in the NA" does not
+       re-frame the Atlantic on a slightly different subset of it. */
+    const placed = conditionsOf(cohort).filter((c) => GEOGRAPHIC_KEYS.has(c.key));
+    const key = JSON.stringify(placed.map((c) => [c.key, c.sentence]));
+    if (!placed.length) return { key, frame: null };
+    const extra = forecastOverlay ? [...forecastOverlay.best, ...forecastOverlay.official]
+      .map((p) => [p.lat, p.lon]) : null;
+    return { key: forecastOverlay ? `${key}|${forecastOverlay.atcf_id}` : key,
+      frame: cohortFrame(archive, result.rows, cohort.where, { extra }) };
+  }, [archive, result, cohort, forecastOverlay]);
+
+  React.useEffect(() => { globalThis.__ATLAS_AUTOFRAME = autoFrame; }, [autoFrame]);
+  const limitsRef = React.useRef(null);
+  const toLimits = React.useCallback(() => {
+    if (limitsRef.current) limitsRef.current.scrollIntoView({ block: "start", behavior: "auto" });
+  }, []);
+
+  /* A SELECTED STORM ADDS THE RECORD TAB; CLEARING IT TAKES THE TAB AWAY AND NEVER LEAVES THE
+     INSPECTOR ON A TAB THAT NO LONGER EXISTS. */
+  React.useEffect(() => { if (selected === null && tab === "record") setTab("outcomes"); },
+    [selected, tab]);
 
   if (error) return <BootError error={error} />;
   if (!archive || !world || !result) return <Boot manifest={manifest} />;
 
-  /* THE PLATE, DEFINED ONCE AND RENDERED BY BOTH SHELLS.
-   *
-   * Two shells exist during the integration and the map is the largest thing they share. Copied
-   * into each, its twenty-odd props would be two things to keep in step for as long as the
-   * transition lasts -- and a prop that drifted would change what the map DRAWS on one shell
-   * only, which is the kind of difference that survives a screenshot comparison. One definition,
-   * two mount points. */
+  const conditions = conditionsOf(cohort);
+  const unasked = !interacted && !conditions.length && selected === null;
+
+  /* THE PLATE. */
   const plate = (
     <AtlasMap
       archive={archive} world={world} coast={coast} contextLand={contextLand} rows={contextRows}
       emphasis={emphasis}
       selected={selected} home={home} homeClamp={NA_EP} homeAnchor={homeAnchor}
       evidenceFrame={evidenceFrame} subjectFrame={subjectFrame} cameraApi={cameraRef}
-      onSelect={selectStorm} onProbe={onProbe} probe={cohort.where}
+      autoFrame={autoFrame ? { ...autoFrame, suspended: selected !== null } : null}
+      onSelect={selectStorm} onProbe={onProbe} onPick={onPick} probe={cohort.where}
       operationalTrack={operationalTrack}
+      forecastOverlay={forecastOverlay}
       replayMs={selected !== null && cursorMs !== null ? cursorMs : undefined}
-      colorBy={layers.colorBy} dimPopulation={selected !== null}
+      colorBy={layers.colorBy} dimPopulation={selected !== null || !!forecastOverlay}
       softenEmphasis={showPathway || showGenesisDensity}
       underDensity={showPathway || showGenesisDensity}
       lens={lens}
       brush={brush} onBrush={setBrush}
       plateMode={plateMode} onPlateMode={(m) => { setPlateMode(m); setInteracted(true); }}
+      layerControls={<LayerToggles layers={layers} setLayers={setLayers} />}
       showGenesis={layers.genesis} showLandfalls={layers.landfalls}
       showPathway={showPathway} pathway={pathway}
       showGenesisDensity={showGenesisDensity} genesisDensity={genesisGrid}
-      mode={mode} timeline={timeline} replayCursorMin={replayCursorMin}
       pathwayStep={2.0} onViewChange={setView}
-      /* THE HEAD BAND'S TWO FIGURES, AND WHICH IS WHICH. `kept` is the COHORT -- what is lifted,
-         and the denominator of every rate in the deck -- and `context` is the population drawn
-         behind it. They were the other way round when the band read "TRACKS DRAWN · LIFTED BY
-         THE QUERY", which put the larger number first and made the caption disagree with the
-         deck's own denominator. */
       kept={emphasis ? emphasis.length : (contextRows ? contextRows.length : result.kept)}
       context={contextRows ? contextRows.length : 0}
+      baselineNoun={comparison && comparison.changed ? comparison.changed.noun : null}
       selectedCount={selected === null ? 0 : 1}
-      /* ONE CLAUSE, NOT TWO. The foot band's measured budget -- scale bar, projection,
-         coastline, coordinates -- was derived before this line existed, and a 68-character
-         hint pushed the COASTLINE statement out at 1920. That statement is the band's one
-         epistemic claim (which geometry is authoritative); an instruction is the most
-         recoverable thing on the band, because the gesture works whether or not the words
-         are there. So the hint is short, and it is also the first casualty in the container
-         ladder -- see atlas.css. */
-      hint={mode === "explore" && !interacted && conditionsOf(cohort).length && selected === null
-        ? (cohort.where ? "CLICK OPEN WATER TO MOVE THE PROBE"
-          : "CLICK OPEN WATER TO ADD A LOCATION CONDITION")
-        : undefined}
+      hint={!unasked && selected === null && !pick
+        ? "CLICK THE MAP TO SEE WHAT PASSES THERE · SHIFT-DRAG TO BRUSH" : undefined}
+      overlay={pick ? (
+        <PickCard pick={pick} archive={archive} where={cohort.where} radiusKm={radiusFor(cohort)}
+          plateW={plateBox.current.w} plateH={plateBox.current.h}
+          onAsk={() => { const p = pick; setPick(null); onProbe(p.lat, p.lon); }}
+          onSelect={selectStorm}
+          onHover={setHoverStorm}
+          onList={() => {
+            const p = pick;
+            setRosterSource({ kind: "cell", rows: p.through,
+              where: `${Math.abs(p.lat).toFixed(0)}°${p.lat < 0 ? "S" : "N"} ${Math.abs(((p.lon + 540) % 360) - 180).toFixed(0)}°${(((p.lon + 540) % 360) - 180) < 0 ? "W" : "E"}` });
+            setTab("storms"); setPick(null);
+          }}
+          onClose={() => { setPick(null); setHoverStorm(null); }} />
+      ) : null}
     >
-      {/* THE INVITATION IS FOR AN UNQUERIED MAP, AND ONLY FOR ONE.
-          It was gated on `!cohort.where` alone, so an analyst who built a cohort entirely
-          from chips -- Cat 3+, since 1971, August and September -- kept a full-size banner
-          reading "CLICK ANY OCEAN POINT" parked over their own data for as long as they
-          worked. The condition is now "has this reader asked anything at all": with no
-          conditions the plate is a blank invitation and the banner is the only instruction
-          on the surface; with any condition it becomes the compact line in the caption
-          band. No tutorial, no dismissal to remember, and nothing that has to be earned --
-          the two states are just the two things that are true. */}
-      {mode === "explore" && !interacted && !conditionsOf(cohort).length && selected === null
-        ? <Invitation /> : null}
+      {unasked ? <Invitation /> : null}
       <Legend colorBy={layers.colorBy} showPathway={showPathway} probe={!!cohort.where}
+        live={selected === null && forecastOverlay ? forecastOverlay : null}
         showGenesisDensity={showGenesisDensity} />
     </AtlasMap>
   );
 
-  /* THE LEDGER IS A SURFACE, NOT A PANEL. It replaces the rail, stage and panel rather than
-     opening beside them, because a page that answers "is any of this any good" while the thing
-     being judged is still on screen invites the reader to skim it. The header stays: the
-     archive's scale and the provenance key belong on both surfaces. */
+  /* THE LEDGER IS A SURFACE, NOT A PANEL. It replaces the working surface rather than opening
+     beside it: a page that answers "is any of this any good" while the thing being judged is
+     still on screen invites the reader to skim it. */
   if (surface === "calibration") {
     return (
       <div data-surface="calibration" data-view="calibration" data-atlas className="atlas-shell" style={{
@@ -1204,24 +1504,6 @@ export function Atlas() {
     );
   }
 
-
-  /* ── THE STACKED SHELL ───────────────────────────────────────────────────────────────────
-   *
-   * FIVE ROWS, NO SIDE RAILS, ONE DOCKED INSPECTOR. The three-column shell spent a fifth of the
-   * width on a builder nobody edits continuously and another fifth on a panel that had to
-   * scroll to answer, and the plate -- the only element whose job is to be large -- took what
-   * was left. Stacked, the plate spans the shell and the answer is a table with every outcome
-   * domain on one axis.
-   *
-   * ROW HEIGHTS ARE FIXED AND THE PLATE IS THE ONLY ELASTIC ONE. The table is never squeezed to
-   * give the map height: selecting a storm takes WIDTH from the plate for the dock, never height
-   * from the evidence. That is the rule the whole arrangement rests on, because the failure it
-   * prevents -- an answer that shrinks when a reader asks about one storm -- is invisible until
-   * the moment it matters.
-   *
-   * This is the only shell. The three-column one, its rail, its panel and the temporary flag
-   * that let both exist during the transition were removed together, once the new surface had
-   * been proven against the real states and check-atlas-dom had passed against both. */
   /* The subject's own verdicts, derived from fields the pack already holds. Membership comes
      from the bridge, which is the one place it is decided. */
   const subject = storm ? {
@@ -1231,191 +1513,208 @@ export function Atlas() {
     reached: subjectVerdicts(storm),
   } : null;
 
-  const conditions = conditionsOf(cohort);
-
+  /* ── THE INSTRUMENT ──────────────────────────────────────────────────────────────────────
+   *
+   * FOUR BANDS, AND THE MAP IS THE LARGEST THING IN EVERY ONE OF THEM THAT HOLDS IT.
+   *
+   *   TOP        the instrument's name, the live systems on the water now, and the three ways
+   *              out: the reader's sealed readings, the calibration ledger and provenance.
+   *   QUESTION   the question as a sentence whose clauses are its controls, the cohort line,
+   *              and every condition a reader can still add, each named as what it asks.
+   *   WORK       the plate, as wide as the viewport allows, and the inspector beside it: the
+   *              ledger, the roster of storms behind it and -- with a storm selected -- that
+   *              storm's record. Selecting a storm takes nothing from the plate.
+   *   RECORD     below the fold: why rows have no rate, what the numbers are measured against,
+   *              what they assume, the environment. Explained once, in one place.
+   *
+   * THE SEAL IS ON THE INSPECTOR'S FOOT AT EVERY SCROLL POSITION, because citing a reading is
+   * the last thing a reader does with it and should never need finding. */
+  const storms = result.kept;
   return (
-    /* THE SHELL'S BOX IS THE STYLESHEET'S, NOT THIS FILE'S.
-       `position:fixed; inset:0; overflow:hidden` was written here, inline, which beats every
-       rule in atlas.css by construction -- so the surface was exactly one viewport whatever the
-       stylesheet said, and everything that did not fit had to scroll inside a column. The
-       composition needs the opposite: a first band declared from the viewport, and a page that
-       continues under it with the complete matrix at full width. That is geometry, it belongs
-       in the one file that holds this surface's geometry, and it cannot be expressed here at
-       all -- an inline style cannot carry a media query. Only the two colours stay, because
-       they are this component's own tokens rather than a shape. */
     <div data-surface="tactical" data-view="tactical" data-atlas ref={shellRef}
-      className="atlas-shell atlas-instrument" style={{
+      className="atlas-shell atlas-v2" data-tab={tab} style={{
         background: "var(--surface-app)", color: "var(--text-1)",
       }}>
-      {/* THE HEAD, AND IT IS THE QUESTION.
-          The identity strip that used to open the surface is gone from the top: 5c moves the
-          wordmark, the method stamp, the pack and the three provenance controls to a colophon on
-          one hairline-ruled line at the foot -- a printed-plate convention -- which clears the
-          top of the screen entirely for the question. Nothing was dropped; it is all still one
-          glance away, at the bottom of a page that does not scroll.
+      <a className="v2-skip" href="#atlas-answer">Skip to the answer</a>
 
-          THE METHODOLOGY NOTICE SITS WITH THE QUESTION, because a URL written under one
-          methodology and opened under another is describing a different question than the one it
-          names, and the reader has to be told before they read the answer. */}
-      {/* HEAD AND BAND, IN ONE BOX DECLARED FROM THE VIEWPORT. Everything below this element is
-          the page continuing: the transport, the complete matrix, the limits and the colophon. */}
-      <div className="atlas-above">
-      <QueryHead segments={segments} conditions={conditions}
-        scope={conditions.filter((c) => c.zone === "scope")}
-        kept={result.kept} total={archive.manifest.counts.storms}
-        sufficient={result.sufficient} minSample={result.min_sample}
-        lastEdit={lastEdit}
-        notice={<>
-          <MethodologyMoved was={urlMethodology} now={archive.manifest.methodology_version} />
-          <BridgeNotice atcfId={urlAtcf} state={urlAtcfState} />
-        </>}
-        onEdit={(zone, el) => { setInteracted(true); openEditor(zone, el); }}
-        onClear={(key) => setCohort(clearCondition(cohort, key))}
-        onReset={onResetQuery} />
+      <header className="v2-top" data-topbar>
+        <div className="v2-brand">
+          <span className="v2-back"><span className="v2-back-w">Millibar</span></span>
+          <span className="v2-word">STORM ATLAS</span>
+          <span className="v2-scope" title="every storm in the archive formed in these basins">
+            {archive.manifest.counts.storms.toLocaleString()} storms · North Atlantic + East Pacific
+            {" · "}{bounds[0]}–{bounds[1]}
+          </span>
+        </div>
+        <LiveStrip systems={activeSystems} generatedAt={live ? live.generatedAt : null}
+          feed={live && live.ok ? live.feedAge(nowMs) : null}
+          currentId={launchedSystem} onLaunch={onLaunchSystem} />
+        <nav className="v2-tools" aria-label="the archive's own records">
+          <button type="button" className="v2-tool" data-open-readings
+            onClick={() => setReadingsOpen(true)}
+            title="the readings you sealed in this browser">Readings</button>
+          <button type="button" className="v2-tool" data-open-ledger
+            onClick={() => openLedger(null)}
+            title="how well has the archive's method done? its own backtest">Calibration</button>
+          <button type="button" className="v2-tool" onClick={() => setProvOpen(true)}
+            title="provenance — every source, stamp and gap (P)">Provenance</button>
+        </nav>
+      </header>
 
-      {/* THE BODY: PLATE LEFT, EVIDENCE LEDGER RIGHT.
-          The two are simultaneous at every width from 900 up, which is the whole architecture --
-          a reader reads a rate while looking at what is drawn. The dock takes width from the
-          plate and nothing else. */}
-      <div className="atlas-plate-row">
-        <div className="atlas-stage-col" style={{ position: "relative", minWidth: 0, minHeight: 0 }}>
-          {plate}
-          {/* THE INSPECTOR OVERLAYS THE PLATE RATHER THAN TAKING A COLUMN FROM IT.
-              In the stacked shell the dock was a third of the row's width and the plate spanned
-              what was left. Here the answer already holds the right-hand column, so a resident
-              dock would take the plate to 414px at 1440 -- narrower than a track needs to be
-              judgeable, and bought out of the one element whose job is to be large. Overlaying is
-              the treatment the stacked shell already used below 1180 and it is unchanged here:
-              same panel, same state, same bridge, same close. */}
-          {storm ? (
-            <div className="atlas-dock" data-inspector-dock>
-              <StormPanel storm={storm} archive={archive} onClose={() => setSelected(null)}
-                onReplay={() => setPlaying((v) => !v)} replaying={playing}
-                spec={stormCitation} specUrl={scenarioURL({ withStorm: true })}
-                bridge={bridge} cohortSentence={sentence} result={result}
+      <main className="v2-main" id="atlas-main">
+        <div className="v2-q atlas-above">
+          <QueryHead segments={segments} conditions={conditions}
+            scope={conditions.filter((c) => c.zone === "scope")}
+            kept={result.kept} total={archive.manifest.counts.storms}
+            sufficient={result.sufficient} minSample={result.min_sample}
+            lastEdit={lastEdit} spec={cohort}
+            notice={<>
+              <SealCheck archive={archive} result={result} sealParam={sealLive ? urlSeal : null} />
+              <MethodologyMoved was={urlMethodology} now={archive.manifest.methodology_version} />
+              <BridgeNotice atcfId={urlAtcf} state={urlAtcfState} cohort={cohort} />
+            </>}
+            onEdit={(zone, el, section) => { setInteracted(true); openEditor(zone, el, section); }}
+            onClear={(key) => setCohort(clearCondition(cohort, key))}
+            onReset={onResetQuery} />
+        </div>
+
+        <div className="v2-work atlas-plate-row">
+          <div className="v2-plate atlas-stage-col">
+            {plate}
+            {selected !== null ? (
+              <div className="v2-transport atlas-transport">
+                <Transport archive={archive} row={selected} playing={stormPlaying}
+                  setPlaying={setStormPlaying} cursorMs={cursorMs} setCursorMs={setCursorMs}
+                  operational={operationalTrack} />
+              </div>
+            ) : null}
+          </div>
+
+          <aside className="v2-insp atlas-answer" id="atlas-answer" data-answer-col
+            aria-label="the answer">
+            {storm && tab !== "record" ? (
+              <SubjectStrip storm={storm} subject={subject} live={liveBundle}
+                recordOpen={tab === "record"}
+                onRecord={() => setTab(tab === "record" ? "outcomes" : "record")}
                 onBridge={() => onBridge(selected)}
-                live={liveBundle}
-                cursorLive={cursorMs !== null || playing
-                  || (mode === "replay" && replayCursorMin !== null)} />
+                proposed={bridge && bridge.proposed}
+                onClear={() => setSelected(null)} />
+            ) : null}
+            <div className="v2-tabs" role="tablist" aria-label="the answer, three ways">
+              <button type="button" role="tab" aria-selected={tab === "outcomes"}
+                data-tab-btn="outcomes" onClick={() => setTab("outcomes")}>
+                Outcomes
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "storms"}
+                data-tab-btn="storms" onClick={() => setTab("storms")}>
+                Storms <span className="v2-tabn">{(rosterSet && !rosterSet.whole
+                  ? rosterSet.rows.length : storms).toLocaleString()}</span>
+              </button>
+              {/* THE THIRD STEP IS ALWAYS NAMED. Without a storm it is disabled and says how to
+                  get one, so the workflow -- outcomes, the storms behind them, one storm's record
+                  -- is visible before it is needed. */}
+              <button type="button" role="tab" aria-selected={tab === "record"}
+                data-tab-btn="record" disabled={!storm}
+                title={storm ? `${storm.name || "Unnamed"} ${storm.season} — the storm's whole record`
+                  : "select a storm on the map or in STORMS to open its record"}
+                onClick={() => storm && setTab("record")}>
+                {storm ? (storm.name || "Unnamed") : "Record"}
+              </button>
             </div>
-          ) : null}
+            <div className="v2-tabbody" role="tabpanel">
+              {tab === "outcomes" ? (
+                <Ledger result={result} comparison={comparison} subject={subject}
+                  archiveTotal={archive.manifest.counts.storms}
+                  lensKey={heldRow} onLens={onLens} onShowMembers={onShowMembers}
+                  column={ledgerColumn} onColumn={setLedgerColumn}
+                  conditions={conditions} onBaseline={setBaselinePin} onLimits={toLimits} />
+              ) : tab === "storms" && rosterSet ? (
+                <Roster archive={archive} rows={rosterSet.rows} label={rosterSet.label}
+                  sourceNote={rosterSet.note || null}
+                  onClearSource={rosterSet.whole ? null : () => setRosterSource(null)}
+                  cohortSize={result.kept}
+                  selected={selected} onSelect={(r) => selectStorm(r, { keepTab: true })}
+                  onHover={setHoverStorm} />
+              ) : tab === "record" && storm ? (
+                <div className="v2-record-tab" data-inspector-dock>
+                  <StormPanel storm={storm} archive={archive} onClose={() => setSelected(null)}
+                    recordFirst
+                    onReplay={() => setStormPlaying((v) => !v)} replaying={stormPlaying}
+                    spec={stormCitation} specUrl={scenarioURL({ withStorm: true })}
+                    bridge={bridge} cohortSentence={sentence} result={result}
+                    onBridge={() => onBridge(selected)}
+                    live={liveBundle}
+                    cursorLive={cursorMs !== null || stormPlaying} />
+                </div>
+              ) : null}
+            </div>
+            <div className="v2-sealbar" data-seal-bar>
+              <button type="button" className="v2-seal" data-open-seal
+                onClick={() => setSealOpen(true)}
+                title="seal this reading: fingerprint its storms, bind its figures, download it">
+                <SealGlyph /> SEAL THIS READING
+              </button>
+              {/* THE FINGERPRINT IS ALREADY ON SCREEN BEFORE THE PRESS. It is the storms' own
+                  identity and it changes with every edit, so the reader sees that the seal is a
+                  property of THIS set of storms -- and, on a sealed link, that it still matches. */}
+              <span className="v2-sealnote" data-seal-preview>
+                <span>
+                  {sealLive && urlSeal && liveFp === String(urlSeal).toLowerCase()
+                    ? <b className="v2-seal-ok">✓ LINK VERIFIED · </b> : null}
+                  {result.kept.toLocaleString()} storms · method {archive.manifest.methodology_version}
+                </span>
+                <span>fingerprint <b>{liveFp}</b></span>
+              </span>
+            </div>
+          </aside>
         </div>
+      </main>
 
-        {/* THE ANSWER, BESIDE THE PLATE, AND IT IS EIGHT ROWS.
-            What was here was the whole evidence base: every contract this cohort can be asked,
-            inside a 486px measure that scrolled 3,457px of deck through a 673px window at 1440.
-            A reader could not see the finding without scrolling, the plate paid for a table that
-            never fit anyway, and the refusal prose repeated after every row it governed. The
-            selection is declared in answer-ladder.jsx and the rest is one screen below, at page
-            width, with these eight underscored there. */}
-        <div className="atlas-answer" data-answer-col>
-          <AnswerLadder result={result} comparison={comparison} subject={subject}
-            archiveTotal={archive.manifest.counts.storms}
-            lensKey={heldRow} onLens={onLens} />
-        </div>
-      </div>
-      </div>
+      <MobileNav tab={tab} setTab={setTab} storms={(rosterSet && !rosterSet.whole
+        ? rosterSet.rows.length : storms)} onSeal={() => setSealOpen(true)} />
 
-      <div className="atlas-transport">
-        {mode === "replay" ? (
-          <ArchiveTransport timeline={timeline} cursorMin={replayCursorMin}
-            setCursorMin={setReplayCursorMin} playing={playing} setPlaying={setPlaying} />
-        ) : selected !== null ? (
-          <Transport archive={archive} row={selected} playing={playing} setPlaying={setPlaying}
-            cursorMs={cursorMs} setCursorMs={setCursorMs} operational={operationalTrack} />
-        ) : null}
-      </div>
-
-      {/* THE FORWARD OUTCOME VIEW, ABOVE THE MATRIX AND ONLY WHEN IT HAS A SUBJECT.
-          It exists when the cohort on screen is keyed to a live system's DERIVED GENESIS -- not
-          to any storm, not to a coordinate a reader typed near one -- because a forecast laid
-          against a population built around some other point is a join between two unrelated
-          things, and a reader would have no way to see that from the plate.
-
-          THE READ IS A GESTURE AND THE GESTURE SAYS WHAT IT COSTS. `latest.json` is the
-          forecast payload, not this artifact's, and it is 80,726 bytes gzipped -- nothing a map
-          needed. So the surface offers it rather than taking it, and the offer names the storm it
-          would fetch a forecast for. */}
       {launchedSystem ? (
-        <div className="atlas-forward" data-forward-row>
+        <div className="atlas-forward v2-forward" data-forward-row>
           {forwardView ? (
             <React.Suspense fallback={null}>
               <ForwardOutcome {...forwardView}
-                onRefresh={() => readOfficial(launchedSystem)}
+                onRefresh={() => readOfficial()}
                 refreshing={officialLoading}
                 supersededAt={supersededAt} />
             </React.Suspense>
           ) : official && !official.ok ? (
-            /* FAIL OPEN, AND SAY SO. The archive answered this cohort completely without the
-               forecast; what is missing is the reference layer, and naming the reason is the
-               difference between a surface that could not reach a file and one that is hiding
-               a result. */
             <Note hook="data-forward-unavailable">
-              <b>NO OFFICIAL FORECAST LAID AGAINST THIS COHORT.</b> The forecast payload could
-              not be read — {official.error}. Every figure below is the archive&rsquo;s own and is
+              <b>NO OFFICIAL FORECAST LAID AGAINST THIS COHORT.</b> The forecast could not be
+              read — {official.error}. Every figure below is the archive&rsquo;s own and is
               unaffected: the forward view is a reference layer over it, not a part of it.
             </Note>
           ) : (
             <div className="at-fo-offer" data-forward-offer>
-              <TextButton onClick={() => readOfficial(launchedSystem)}
+              <TextButton onClick={() => readOfficial()}
                 hook="data-forward-load"
-                title="reads NHC's official forecast payload, fetched only now —
-                       and places each of its points against this cohort by absolute valid time">
-                {officialLoading ? "READING THE ADVISORY…"
-                  : `LAY THE OFFICIAL ${launchedSystem} FORECAST AGAINST THIS COHORT →`}
+                title="re-reads the forecast file the capture feeds (about 17 KB) and places each
+                       of its points against this cohort by absolute valid time">
+                {officialLoading || !forecast ? "READING THE ADVISORY…"
+                  : `RE-READ THE OFFICIAL ${launchedSystem} FORECAST →`}
               </TextButton>
               <span>Places each forecast point against this population by <b>absolute valid
-                time</b>, never by matching lead-hour labels. ~80 KB, read on this press.</span>
+                time</b>, never by matching lead-hour labels.</span>
             </div>
           )}
         </div>
       ) : null}
 
-      {/* THE COMPLETE EVIDENCE, UNDER THE BAND AND AT PAGE WIDTH.
-          Every contract, every column the archive publishes, in one table a reader can read
-          across -- and beneath it the limits, grouped once per governing refusal, then the
-          method, the pathway, the environment and the citation. Nothing is behind a scroller of
-          its own: the page scrolls, which is what a page is for. */}
-      <div className="atlas-evidence" data-evidence-row>
-        <EvidenceDeck result={result} comparison={comparison} subject={subject}
-          onEvidence={openLedger}
-          /* THE LADDER, CUMULATIVELY. The matrix runs the page's own width now rather than a
-             486px column, so it is passed `wide` and keeps every track it can fill; the duration
-             pair still folds behind the control that names how many columns it holds, because
-             timing is a second question and not every reader is asking it. Nothing is dropped:
-             the fold is counted and named, and one press restores it. */
-          wide
-          foldTiming timingOpen={timingOpen}
-          onToggleTiming={() => setTimingOpen((v) => !v)}
-          /* AND NOTHING FOLDS ON WIDTH. The landfall fold and the group collapse both existed
-             because the deck was the first thing on the screen and a narrow one had to give up
-             ROWS to fit; the matrix is below the answer now, in the page's own scroll, so a
-             reader who has reached it has already been answered and there is nothing to buy by
-             hiding rows. Both were also folds a refusal could hide behind: the landfall list is ordered
-             by evidence, so the rows a width-keyed fold reaches last are exactly the ones whose
-             whole content is the explanation of why there is no evidence -- OUT OF SCOPE and
-             BASE RATE ONLY. Order demotes; hiding deletes. */
-          collapseGroups={false} openGroups={openGroups}
-          onToggleGroup={(k) => setOpenGroups((m) => ({ ...m, [k]: !m[k] }))}
-          /* THE COMPARISON'S IDENTITY AND ITS CONTROL, WHICH THE DECK'S COLUMN CANNOT CARRY.
-             The VS ARCHIVE cell holds one signed figure per row; what the baseline IS, how it
-             relates to this cohort, and which condition a reader would rather hold out are
-             facts about the whole table and live in its foot. */
-          conditions={conditionsOf(cohort)} onBaseline={setBaselinePin}
+      <section className="v2-below atlas-evidence" data-evidence-row aria-label="the record behind this reading">
+        <EvidenceRecord result={result} comparison={comparison} subject={subject}
+          onEvidence={openLedger} limitsRef={limitsRef}
+          conditions={conditions} onBaseline={setBaselinePin}
           whatChanged={whatChanged}
-          citation={citation} citationUrl={scenarioURL()}
-          replayNote={mode === "replay"
-            ? <ReplayNote timeline={timeline} result={result} /> : null}
-          /* The pathway disclosure is always present, not gated on the layer being on:
-             it is the sentence that stops a shaded map being read as a forecast cone, and a
-             reader who turns the layer on should not have to also discover the caveat. */
+          citation={citation} citationUrl={scenarioURL()} onSeal={() => setSealOpen(true)}
           spec={cohort} pathway
           environment={<EnvLens archive={archive} coverage={envCov} lens={envLens}
             loading={envLoading} onLoad={loadEnv} />} />
-      </div>
+      </section>
 
-      {/* THE BUILDER, SUMMONED. Same component, same state, same costs -- it is the same query
-          surface the rail held, moved behind the zone label that opens it. */}
       {sheetZone ? (
         <div className="at-sheet" data-builder-sheet data-sheet-anchored={sheetAt ? "" : undefined}
           role="dialog" aria-label="edit conditions" aria-modal="false"
@@ -1430,26 +1729,14 @@ export function Atlas() {
           <div className="at-sheet-body">
             <CohortBuilder archive={archive} cohort={cohort}
               setCohort={(f) => setCohort(normalise(f))}
-              result={result} preview={preview}
-              layers={layers} setLayers={setLayers} bounds={bounds}
-              mode={mode} setMode={setMode}
-              timeline={timeline} sentence={sentence} conditions={conditionsOf(cohort)}
-              envCoverage={envCov}
-              activeSystems={activeSystems} liveGeneratedAt={live ? live.generatedAt : null}
-              launchedSystem={launchedSystem} onLaunchSystem={onLaunchSystem}
+              result={result} preview={preview} bounds={bounds}
+              sentence={sentence} conditions={conditions}
+              envCoverage={envCov} focusSection={sheetSection}
               onReset={() => { setCohort(normalise(EMPTY_COHORT)); setSelected(null); }} />
           </div>
         </div>
       ) : null}
 
-      {/* THE COLOPHON. Wordmark, the archive's scale, the three stamps that say what these
-          numbers MEAN, and the three ways out to provenance, calibration and a citation -- on
-          one hairline-ruled line at the foot. It is a printed-plate convention and it is the
-          reason the top of the screen is the question and nothing else.
-
-          NOTHING WAS DROPPED IN THE MOVE. The identity strip held exactly these items; what
-          changed is that they are at the foot of a surface that does not scroll, so they are
-          still one glance away and no longer competing with the question for the first line. */}
       <Colophon archive={archive} citation={citation} citationUrl={scenarioURL()}
         onProvenance={() => setProvOpen(true)} onLedger={() => openLedger(null)} />
 
@@ -1459,6 +1746,14 @@ export function Atlas() {
             onClose={() => setProvOpen(false)} frame={view ? view.frame : null} />
         ) : null}
       </React.Suspense>
+
+      {sealOpen ? (
+        <SealPanel archive={archive} spec={cohort} result={result} question={sentence}
+          baseline={comparison && context ? { noun: comparison.changed ? comparison.changed.noun : null, result: context } : null}
+          citation={citation} url={scenarioURL()}
+          onClose={() => setSealOpen(false)} />
+      ) : null}
+      {readingsOpen ? <ReadingsPanel onClose={() => setReadingsOpen(false)} /> : null}
     </div>
   );
 }
@@ -1671,6 +1966,125 @@ export function rowsFrame(archive, rows, { stride = 3, extra = null } = {}) {
   return [[s, w], [n, e]];
 }
 
+/* THE FRAME A COHORT ASKS FOR, WHICH IS ITS CORE AND NOT ITS EXTREMES.
+ *
+ * `rowsFrame` is FIT's frame and it is right for FIT: a reader who presses FIT is asking to see
+ * everything drawn, extratropical tails to 60N included. A camera that follows a question needs
+ * the opposite -- where the storms of this cohort actually are -- or one storm that recurved to
+ * Newfoundland frames a 500 km East Pacific cohort as the whole North Atlantic. So this is the
+ * box of the cohort's fixes at q3..q97, unioned with the location condition's own circle so the
+ * circle a reader drew is always inside what they are shown. A camera position, not a claim. */
+/* THE SEAL'S MARK: a ring with a keyed centre, drawn in the button's own ink. */
+function SealGlyph() {
+  return (
+    <svg className="v2-seal-g" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+      <circle cx="6.5" cy="6.5" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="6.5" cy="6.5" r="3.2" fill="none" stroke="currentColor" strokeWidth="0.8"
+        strokeDasharray="1.2 1.1" />
+      <circle cx="6.5" cy="6.5" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+/* THE PHONE'S WAY THROUGH THE ANSWER. On a 390px screen the question, the map and the ledger are
+   three screens apart, and nothing said the outcomes and the storms were below the map. This bar
+   is fixed at the foot of the screen and names the four places a reader goes: the map, the
+   outcomes, the storms, and the seal. It says where the reader is, and each press is one move --
+   the tab is set and the page scrolls to it. Hidden above 760px, where all four are on screen. */
+function MobileNav({ tab, setTab, storms, onSeal }) {
+  const [where, setWhere] = React.useState("map");
+  React.useEffect(() => {
+    const plate = document.querySelector(".v2-plate");
+    const insp = document.querySelector("#atlas-answer");
+    if (!plate || !insp || typeof IntersectionObserver === "undefined") return undefined;
+    const seen = new Map();
+    const io = new IntersectionObserver((es) => {
+      for (const e of es) seen.set(e.target, e.intersectionRatio);
+      setWhere((seen.get(insp) || 0) > (seen.get(plate) || 0) ? "answer" : "map");
+    }, { threshold: [0, 0.15, 0.35, 0.6, 1] });
+    io.observe(plate); io.observe(insp);
+    return () => io.disconnect();
+  }, []);
+  const go = (sel, t) => {
+    if (t) setTab(t);
+    const el = document.querySelector(sel);
+    if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+  const on = (k) => (k === "map" ? where === "map" : where === "answer" && tab === k);
+  return (
+    <nav className="v2-mnav" data-mobile-nav aria-label="jump to">
+      <button type="button" aria-current={on("map") ? "true" : undefined}
+        onClick={() => go(".v2-plate")}>Map</button>
+      <button type="button" aria-current={on("outcomes") ? "true" : undefined}
+        onClick={() => go("#atlas-answer", "outcomes")}>Outcomes</button>
+      <button type="button" aria-current={on("storms") ? "true" : undefined}
+        onClick={() => go("#atlas-answer", "storms")}>Storms <span>{Number(storms).toLocaleString()}</span></button>
+      <button type="button" className="v2-mnav-seal" onClick={onSeal}>Seal</button>
+    </nav>
+  );
+}
+
+/* THE HELD ROW'S STORMS ARE DRAWN IN THE ROW'S OWN INK -- the class colour its ledger bar
+   already carries, or the landfall pink -- so the eye can go from the row to its storms on the
+   plate without a legend, and the lifted set cannot be mistaken for the cohort's blue. */
+function lensInkOf(key) {
+  const m = /^int:(\w+)$/.exec(String(key || ""));
+  if (m && CATEGORY_COLOR[m[1]]) return CATEGORY_COLOR[m[1]];
+  if (/^lf:/.test(String(key || ""))) return LANDFALL_INK;
+  return null;
+}
+
+const GEOGRAPHIC_KEYS = new Set(["where", "basins", "subbasinsEntered"]);
+
+export function cohortFrame(archive, rows, where = null, { lo = 0.03, hi = 0.97, extra = null } = {}) {
+  if (!archive) return null;
+  const lats = [];
+  const lons = [];
+  const total = rows ? rows.length : 0;
+  const stride = total > 1500 ? 4 : total > 400 ? 3 : 2;
+  for (const i of rows || []) {
+    const [a, b] = archive.trackRange(i);
+    for (let k = a; k < b; k += stride) {
+      lats.push(archive.ptLat[k] / 100);
+      lons.push(archive.ptLon[k] / 100);
+    }
+  }
+  let s = Infinity; let n = -Infinity; let w = Infinity; let e = -Infinity;
+  if (lats.length) {
+    const mid = quantile(lons.slice().sort(asc), 0.5);
+    const un = lons.map((lo0) => {
+      let v = lo0;
+      while (v - mid > 180) v -= 360;
+      while (mid - v > 180) v += 360;
+      return v;
+    }).sort(asc);
+    const la = lats.slice().sort(asc);
+    s = quantile(la, lo); n = quantile(la, hi);
+    w = quantile(un, lo); e = quantile(un, hi);
+  }
+  if (where) {
+    const dLat = where.radiusKm / 111.2;
+    const dLon = where.radiusKm / (111.2 * Math.max(0.2, Math.cos(where.lat * Math.PI / 180)));
+    s = Math.min(s, where.lat - dLat); n = Math.max(n, where.lat + dLat);
+    w = Math.min(w, where.lon - dLon); e = Math.max(e, where.lon + dLon);
+  }
+  /* A LAUNCHED LIVE SYSTEM'S OWN TRACK AND FORECAST, so the storm the cohort is keyed to is on
+     the plate with it. Unwrapped next to the frame's centre, as the cohort's longitudes are. */
+  if (extra && extra.length && Number.isFinite(s) && Number.isFinite(w)) {
+    const mid = (w + e) / 2;
+    for (const [la, lo0] of extra) {
+      let v = lo0;
+      while (v - mid > 180) v -= 360;
+      while (mid - v > 180) v += 360;
+      s = Math.min(s, la); n = Math.max(n, la); w = Math.min(w, v); e = Math.max(e, v);
+    }
+  }
+  if (!Number.isFinite(s) || !Number.isFinite(w)) return null;
+  if (n - s < 4) { const c = (n + s) / 2; s = c - 2; n = c + 2; }
+  if (e - w < 6) { const c = (e + w) / 2; w = c - 3; e = c + 3; }
+  return [[s, w], [n, e]];
+}
+
 function asc(a, b) { return a - b; }
 
 function quantile(sorted, p) {
@@ -1691,57 +2105,66 @@ function quantile(sorted, p) {
    days after it forms — so the common case for a storm that is on the live board RIGHT NOW is that
    it is not here yet, and that has to be said rather than left as a selection that silently did
    not happen. Nothing about the cohort's answer changes either way. */
-function BridgeNotice({ atcfId, state }) {
+function BridgeNotice({ atcfId, state, cohort }) {
   if (!atcfId || !state) return null;
-  const missing = state === "missing";
+  const id = String(atcfId).toUpperCase();
+  const ok = state === "resolved";
+  /* WHAT THE COHORT ON SCREEN ACTUALLY IS, read from the spec rather than assumed. The notice
+     used to assert "the storm's genesis neighbourhood and the month it formed in" whenever an
+     id was present -- over a whole-archive cohort, and over a bridge that never sets a month. */
+  const keyed = cohort && cohort.where;
+  const withMonth = keyed && cohort.months && cohort.months.length;
+  const cohortLine = keyed
+    ? `The cohort is keyed to where it formed${withMonth ? " and the month it formed in" : ""}; every count in it is a storm that already happened, and none of them is a forecast for this one.`
+    : "This link carries no genesis condition, so the cohort is whatever the rest of the link asked for — not a neighbourhood of this storm.";
+  const HEAD = {
+    resolved: `OPENED BY LINK · ${id} SELECTED`,
+    pending: `OPENED BY LINK · ${id} IS NOT IN THIS ARCHIVE PACK YET`,
+    past: `OPENED FROM A LINK · ${id} IS NOT IN THIS ARCHIVE`,
+    invest: `OPENED FROM A LINK · ${id} IS AN INVEST NUMBER`,
+    ambiguous: `OPENED FROM A LINK · ${id} IS AMBIGUOUS IN THIS PACK`,
+    malformed: `OPENED FROM A LINK · “${atcfId}” IS NOT AN ATCF ID`,
+  };
+  const WHY = {
+    resolved: "The storm's own record is selected on the plate. ",
+    pending: "The archive is IBTrACS, which publishes a running season with a lag of days; the live storm joins by ATCF id only once its row exists. ",
+    past: "Its season is already in the pack and no row carries this id, so waiting will not bring it. ",
+    invest: "Numbers 90–99 designate disturbances, and this archive holds storms only. ",
+    ambiguous: "Two rows claim this id, and a join that could land on either is refused rather than resolved to the first. ",
+    malformed: "An ATCF id for these basins is AL, EP or CP, a two-digit number and a four-digit season — EP162026. Nothing was selected. ",
+  };
+  const warn = !ok;
   return (
-    <div data-atlas-bridge-notice={state} style={{
-      margin: "var(--sp-5) var(--sp-6) 0",
-      border: "1px solid var(--border-strong)",
-      borderLeft: "var(--bw-signal) solid " + (missing ? "var(--warn)" : "var(--accent)"),
-      borderRadius: "var(--radius-sm)", padding: "var(--sp-3) var(--sp-4)",
-      background: "color-mix(in srgb, " + (missing ? "var(--warn)" : "var(--accent)") + " 6%, transparent)",
+    <div data-atlas-bridge-notice={state === "pending" ? "missing" : state} data-bridge-reason={state}
+      className="at-notice" style={{
+      borderLeft: "var(--bw-signal) solid " + (warn ? "var(--warn)" : "var(--accent)"),
+      background: "color-mix(in srgb, " + (warn ? "var(--warn)" : "var(--accent)") + " 6%, transparent)",
     }}>
-      <div style={{ ...MONO, fontSize: "var(--fs-mono-xs)", fontWeight: 800,
-        color: missing ? "var(--warn)" : "var(--accent)", letterSpacing: ".5px" }}>
-        {missing ? `OPENED BY LINK · ${String(atcfId).toUpperCase()} IS NOT IN THIS ARCHIVE PACK YET`
-                 : `OPENED BY LINK · ${String(atcfId).toUpperCase()} SELECTED`}
+      <div className="at-notice-hd" style={{ color: warn ? "var(--warn)" : "var(--accent)" }}>
+        {HEAD[state] || HEAD.pending}
       </div>
-      <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--fs-caption)",
-        color: "var(--text-2)", lineHeight: "var(--lh-body)", marginTop: 3 }}>
-        {missing
-          ? "The cohort below is the storm's genesis neighbourhood — where it formed and the month it formed in — and every "
-            + "count in it is a storm that already happened. The live storm itself is not a row here: the archive is IBTrACS, "
-            + "which publishes a running season with a lag of days, and the operational record joins by ATCF id only once "
-            + "that row exists. Nothing in the cohort is about this storm's own future."
-          : "The cohort is the storm's genesis neighbourhood and the month it formed in; the storm's own record is selected "
-            + "on the plate. The cohort's counts are storms that already happened, and none of them is a forecast for this one."}
-      </div>
+      <div className="at-notice-bd">{(WHY[state] || WHY.pending) + cohortLine}</div>
     </div>
   );
 }
 
+/* THE METHODOLOGY MOVED UNDER A LINK. What moved is said by release, from engine/methodology.js,
+   so a link made under 1.1.0 and opened under 1.1.1 is told that counts may differ (1.1.1 changed
+   which storms have a known outcome), not the 1.1.0 refusal story it used to hear whatever the
+   versions were. */
 function MethodologyMoved({ was, now }) {
-  if (!was || !now || was === now) return null;
+  const moved = methodologyMoved(was, now);
+  if (!moved) return null;
   return (
-    <div data-methodology-moved style={{
-      margin: "var(--sp-5) var(--sp-6) 0",
-      border: "1px solid var(--border-strong)",
-      borderLeft: "var(--bw-signal) solid var(--warn)",
-      borderRadius: "var(--radius-sm)", padding: "var(--sp-3) var(--sp-4)",
+    <div className="at-notice" data-methodology-moved={moved.direction} style={{
+      borderLeft: "var(--bw-signal, 3px) solid var(--warn)",
       background: "color-mix(in srgb, var(--warn) 6%, transparent)",
     }}>
-      <div style={{ ...MONO, fontSize: "var(--fs-mono-xs)", fontWeight: 800,
-        color: "var(--warn)", letterSpacing: ".5px" }}>
-        THE METHODOLOGY MOVED SINCE THIS LINK WAS MADE
+      <div className="at-notice-hd" style={{ color: "var(--warn)" }}>
+        THE METHODOLOGY MOVED SINCE THIS LINK WAS MADE · {was} → {now}
       </div>
-      <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--fs-caption)",
-        color: "var(--text-2)", lineHeight: "var(--lh-body)", marginTop: 3 }}>
-        This link was made under methodology {was}; the archive now publishes under {now}. The
-        cohort is unchanged and so are its counts — what may differ is which contracts are
-        refused. 1.1.0 stopped counting the refusal gate over the whole archive and started
-        counting it over the population a query can actually draw from, so some contracts that
-        published a rate under {was} now refuse as OUT OF SCOPE.
+      <div className="at-notice-bd">
+        {moved.sentences.map((t, i) => <p key={i} style={{ margin: i ? "4px 0 0" : 0 }}>{t}</p>)}
       </div>
     </div>
   );
@@ -1826,14 +2249,14 @@ function Header({ archive, onProvenance, onLedger }) {
         {/* The tagline ellipsises before the rail's floor does, so the whole of it is carried
             as the element's own title as well as its text. */}
         <div className="at-sub" title="Millibar · genesis-to-intensity archive">
-          Millibar
+          <span>Millibar</span>
           {" · genesis-to-intensity archive"}
         </div>
       </div>
       <ScaleLine manifest={m} />
       <div className="at-sys">
         <div className="at-stack">
-          <div title={`METHODOLOGY ${m.methodology_version} · PACK ${p.archive_stamp}`}>
+          <div title={`METHODOLOGY ${m.methodology_version} · ${archiveIdOf(m)}PACK ${p.archive_stamp}`}>
             METHODOLOGY <em>{m.methodology_version}</em> · PACK <em>{p.archive_stamp}</em>
           </div>
           <div title={`BUILT ${p.archive_built_utc || ""}`}>
@@ -1864,15 +2287,15 @@ function Invitation() {
      as a bordered, rounded box, and the rule sat dead beside it. */
   return (
     <div className="at-invite" data-invitation>
-      <em>Click any ocean point</em> — what formed there, and where it went ·{" "}
-      <em>click a genesis point</em> for one storm
+      <em>Click the map</em> — the storms that pass there, and a button to ask what formed near
+      it · <em>click a genesis point</em> for one storm · <em>+ add</em> a condition above
     </div>
   );
 }
 
 /* Every density surface on screen has to name what its shading COUNTS. A coloured grid over a
    map is read as a probability unless it says otherwise, and neither of these is one. */
-function Legend({ colorBy, showPathway, showGenesisDensity, probe }) {
+function Legend({ colorBy, showPathway, showGenesisDensity, probe, live = null }) {
   const items = [["ts", "TS"], ["cat1", "1"], ["cat2", "2"], ["cat3", "3"], ["cat4", "4"],
     ["cat5", "5"]];
   const surfaces = [];
@@ -1881,14 +2304,27 @@ function Legend({ colorBy, showPathway, showGenesisDensity, probe }) {
      shaded ocean is read as a forecast cone unless it says otherwise. */
   if (showPathway) {
     surfaces.push(["79, 195, 247", "PATHWAY COUNTS",
-      probe ? "distinct storms of the matched pool through each 2° cell — not a forecast"
-        : "distinct storms of the cohort through each 2° cell — not a forecast"]);
+      probe ? "matched storms per 2° cell · not a forecast"
+        : "cohort storms per 2° cell · not a forecast"]);
   }
   if (showGenesisDensity) {
     surfaces.push(["155, 123, 240", "GENESIS COUNTS",
-      "storms that formed in each 2° cell, one per storm — a count, not a rate"]);
+      "storms formed per 2° cell · a count, not a rate"]);
   }
-  if (colorBy !== "intensity" && !surfaces.length) return null;
+  if (colorBy !== "intensity" && !surfaces.length && !live) return null;
+  /* THE LIVE SYSTEM'S MARKS, NAMED. They are the only achromatic marks on the plate, and each
+     says what it is and whose it is: none of them is the archive's. */
+  const swatch = (dash, w = 1.6, op = 1) => (
+    <svg width="18" height="6" aria-hidden="true" style={{ flex: "none" }}>
+      <line x1="0" y1="3" x2="18" y2="3" stroke="#e6e8eb" strokeOpacity={op} strokeWidth={w}
+        strokeDasharray={dash || undefined} />
+    </svg>);
+  const liveRows = live ? [
+    [swatch(null, 2), `${live.name || live.atcf_id} · track since derived genesis`],
+    live.official.length ? [swatch("5 4"), `NHC #${live.advisory} forecast · NHC's own cone`] : null,
+    live.runs.length ? [swatch(null, 1, 0.55), `${live.runs.length} guidance runs · ${live.cycle || "—"}`] : null,
+    live.alerts.length ? [swatch(null, 3, 1), "exposure the watch flagged"] : null,
+  ].filter(Boolean) : [];
   /* THE STYLESHEET ALREADY HAD THIS, AND IT WAS UNREACHABLE.
      atlas.css declares `.at-legend` with `.at-lrow`, `.at-sw` and `.at-d` -- including
      `bottom: calc(var(--at-plate-gutter) + 22px)`, a value chosen to clear Leaflet's
@@ -1898,6 +2334,9 @@ function Legend({ colorBy, showPathway, showGenesisDensity, probe }) {
      less place the legend's appearance is decided. */
   return (
     <div className="at-legend">
+      {liveRows.map(([sw, text]) => (
+        <div className="at-lrow at-lrow-live" key={text} data-legend-live>{sw}<span>{text}</span></div>
+      ))}
       {surfaces.map(([hue, title, note]) => (
         <div className="at-lrow" key={title}>
           <span className="at-sw">
@@ -1937,55 +2376,72 @@ const CAT_HEX = { ts: "#7fb2e6", cat1: "#38bdf8", cat2: "#fbbf24", cat3: "#f59e0
  * IT LIVED IN THE PANEL AND THE PANEL IS GONE. Rebuilt on the deck's own classes rather than
  * ported with its inline styles: the panel's `--warn` amber was written for a near-black chrome
  * and this surface is paper. The words are unchanged. */
-function ReplayNote({ timeline, result }) {
-  const tl = timeline;
-  if (!tl || !tl.n) {
-    return (
-      <p className="at-foot-line">
-        The current filter selects no storms, so there is nothing to replay.
-      </p>
-    );
-  }
+/* THE PLATE'S LAYERS, ON THE PLATE HEAD. Three toggles that change the ink and nothing else. */
+function LayerToggles({ layers, setLayers }) {
+  const t = (k, label, on, next, title) => (
+    <button type="button" key={k} className="at-plate-modebtn at-layer-btn" data-layer={k}
+      aria-pressed={on ? "true" : "false"} onClick={() => setLayers(next)} title={title}>
+      {label}
+    </button>
+  );
   return (
-    <>
-      <p className="at-foot-line">
-        <strong>{tl.n.toLocaleString()} storms</strong> between {fmtYear(tl.firstT)} and{" "}
-        {fmtYear(tl.lastT)}. Tracks stay on the map as they are revealed, so what builds up is
-        the shape of the whole record rather than one storm at a time.
-      </p>
-      {/* Stated as years rather than as a percentage, deliberately: this build renders no
-          percentage it computed itself, and "43.5 of 174.5 years" is the more concrete
-          statement anyway. */}
-      <p className="at-foot-line">
-        <strong className="at-foot-flag">The clock skips quiet stretches.</strong>{" "}
-        {tl.activeMin !== null && tl.activeMin !== undefined
-          ? <>Only {yearsOf(tl.activeMin)} of those {yearsOf(tl.spanMin)} calendar years have a
-              storm anywhere on the map</>
-          : <>Much of the span has no storm active</>} — the rest is off-season, repeated.
-        Those gaps are jumped and every jump is announced on the transport. Nothing else is
-        changed: every storm appears, once, in order, over its whole observed span.
-      </p>
-      {result && result.excluded && result.excluded.noGenesis ? (
-        <p className="at-foot-line">
-          {result.excluded.noGenesis} storms are not in this run: the archive holds no genesis
-          point for them, so the filter cannot place them.
-        </p>
-      ) : null}
-      <p className="at-foot-line">
-        The conditions drive the run. Narrow to Cat 3+ and only the majors unfold; narrow to a
-        landfall region and only the storms that reached it do.
-      </p>
-      <p className="at-foot-line">{claimText("atlas.replay")}</p>
-    </>
+    <span className="at-plate-modes at-layers" role="group" aria-label="layers drawn on the plate"
+      data-layer-controls>
+      {t("class", "CLASS INK", layers.colorBy === "intensity",
+        { ...layers, colorBy: layers.colorBy === "intensity" ? "uniform" : "intensity" },
+        "colour each track segment by the Saffir-Simpson class of the fix it leaves")}
+      {t("genesis", "GENESIS", layers.genesis, { ...layers, genesis: !layers.genesis },
+        "draw each storm's genesis point")}
+      {t("landfalls", "LANDFALLS", layers.landfalls, { ...layers, landfalls: !layers.landfalls },
+        "draw each detected landfall crossing")}
+    </span>
   );
 }
 
-function fmtYear(min) {
-  return new Date(min * 60000).getUTCFullYear();
-}
-
-function yearsOf(minutes) {
-  return (minutes / 525600).toFixed(1);
+/* THE SELECTED STORM, AS A STRIP ABOVE THE ANSWER -- NEVER INSTEAD OF IT.
+ *
+ * The locked rule for a selection is a minimum strip that does not replace the ledger. The dock
+ * that held it was a third of the plate's width laid over the map; this is one band on the
+ * inspector: who the storm is, its peak by the record that is speaking, whether it is a member
+ * of this cohort, and the three things a reader does next -- read its record, build the cohort
+ * around where it formed, or let it go. The ledger below it keeps every row and marks which
+ * contracts this storm reached. */
+function SubjectStrip({ storm, subject, live, recordOpen, onRecord, onBridge, proposed, onClear }) {
+  const view = live && live.state === LIVE_OPERATIONAL ? live.view : null;
+  const peak = view ? view.peak_wind_kt : storm.max_vmax_kt;
+  const cat = view ? view.peak_category : storm.max_category;
+  const member = subject && subject.inCohort;
+  const unavailable = live && live.state === "unavailable";
+  return (
+    <div className="sj" data-subject-strip data-inspector>
+      <div className="sj-who">
+        <span className="sj-name">{storm.name || "UNNAMED"}</span>
+        <span className="sj-season">{storm.season}</span>
+        <span className="sj-meta">{storm.basin}{storm.atcf_id ? ` · ${storm.atcf_id}` : ""}</span>
+        <button type="button" className="sj-x" data-clear-selection onClick={onClear}
+          aria-label="clear the selected storm" title="clear the selection (Esc)">✕</button>
+      </div>
+      <div className="sj-facts">
+        <span className="sj-peak" title={view ? "operational to date — not post-analysed" : "the archive's peak wind"}>
+          <i style={{ background: CATEGORY_COLOR[cat] || "var(--t4)" }} aria-hidden="true" />
+          {peak === null || peak === undefined ? "—" : `${Math.round(peak)} kt`}
+          <span className="sj-src">{view ? "OPERATIONAL" : unavailable ? "PROVISIONAL" : "ARCHIVE PEAK"}</span>
+        </span>
+        <span className={member ? "sj-mem" : "sj-mem sj-out"} data-subject-member={member ? "in" : "out"}>
+          {member ? "IN THIS COHORT" : "NOT IN THIS COHORT"}
+        </span>
+      </div>
+      <div className="sj-acts">
+        {/* No RECORD button here: the RECORD tab directly below is that control. */}
+        {proposed ? (
+          <button type="button" data-bridge-build onClick={onBridge}
+            title="keep every other condition and replace the location with this storm's genesis point">
+            COHORT AROUND ITS GENESIS
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function Boot({ manifest }) {

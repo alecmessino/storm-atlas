@@ -47,6 +47,98 @@ const DEG = (lat, lon) => {
   return `${Math.abs(lat).toFixed(1)}°${ns} ${Math.abs(lon).toFixed(1)}°${ew}`;
 };
 
+const ageText = (h) => (!Number.isFinite(h) ? "age unknown"
+  : h < 1 ? `${Math.max(0, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} d`);
+
+/* THE WATCH'S STATES, AS THE WATCH NAMES THEM. Only the three that need a reader's eye get a
+   mark on the top bar; QUIET is the absence of a mark, and INSUFFICIENT is a refusal that is
+   printed inside the card with its reason rather than dressed up as a signal. */
+const WATCH_CLASS = { ELEVATED: "lv-w-elev", DISAGREEMENT: "lv-w-dis", "EVIDENCE CASE": "lv-w-case" };
+
+function WatchMark({ fc }) {
+  const w = fc && fc.state === "ok" ? fc.watch : null;
+  if (!w || !w.alerts.length) return null;
+  const top = w.alerts[0];
+  return (
+    <span className={`lv-w ${WATCH_CLASS[top.state] || ""}`} data-live-watch={top.state}
+      title={`${top.state} on ${top.label}${w.alerts.length > 1 ? ` and ${w.alerts.length - 1} more exposure(s)` : ""} — the disagreement watch's own verdict`}>
+      {top.state}{w.alerts.length > 1 ? ` +${w.alerts.length - 1}` : ""}
+    </span>
+  );
+}
+
+/* FORECAST NOW, AND WHAT THE WATCH MADE OF IT.
+ *
+ * Everything here is CARRIED: the advisory as the capture first saw it, the guidance cycle the
+ * watch evaluated, and the watch's own newest row per registered exposure, copied as written.
+ * Nothing is computed in this file, nothing here enters the cohort, and a count of runs is never
+ * turned into a chance. A missing watch is said to be missing -- never shown as QUIET. */
+function ForecastNow({ fc }) {
+  if (!fc || fc.state === "loading") {
+    return <Note style={{ marginTop: 9 }} hook="data-live-forecast-loading">Reading the forecast file…</Note>;
+  }
+  if (fc.state !== "ok") {
+    return (
+      <Note style={{ marginTop: 9 }} hook="data-live-forecast-none">
+        <b>NO FORECAST ON FILE.</b> {fc.error || "This system has no advisory in the capture's newest state."}{" "}
+        The historical cohort is unaffected.
+      </Note>
+    );
+  }
+  const g = fc.guidance;
+  const cyc = g.cycle ? `${g.cycle.slice(6, 8)}/${g.cycle.slice(8, 10)}Z` : "no cycle";
+  const w = fc.watch;
+  return (
+    <div className="at-live-fc" data-live-forecast>
+      <div className="at-live-fc-h"><span>FORECAST NOW</span><em>OPERATIONAL · CARRIED, NOT COMPUTED</em></div>
+      <Reading label="NHC ADVISORY" qualifier={fc.firstSeen ? `FIRST SEEN ${fmtUTC(fc.firstSeen)}` : null}
+        title="The forecast advisory (TCM) in force at the capture's newest instant, and when the capture first saw it."
+        value={`#${fc.advisory} · issued ${fmtUTC(fc.issued)} · ${fc.points} forecast points`} />
+      <Reading label="GUIDANCE" qualifier={g.missing.length ? `MISSING ${g.missing.join(", ")}` : "ALL FAMILIES"}
+        dim={g.runs === 0}
+        title="Family runs from the newest early-guidance cycle the capture had first seen. An absent family stays absent: an older cycle is never substituted."
+        value={`${g.runs} of ${g.families} families · ${cyc} cycle · ${Number.isFinite(g.ageH) ? `${g.ageH} h` : "—"} old at capture`} />
+      <Reading label="CONE" dim
+        value={fc.cone ? `${fc.cone.kind === "OFFICIAL_GIS" ? "NHC's own GIS polygon" : fc.cone.kind} · adv ${fc.cone.advisory}${fc.cone.matches === false ? " · NOT THIS ADVISORY" : ""}` : "none on file"} />
+
+      <div className="at-live-fc-h at-live-fc-wh"><span>DISAGREEMENT WATCH</span>
+        <em>{w ? `${w.engine} · as of ${fmtUTC(w.asOf)}` : "—"}</em></div>
+      {!fc.watchSupplied ? (
+        <Note hook="data-live-watch-absent"><b>THE WATCH WAS NOT SUPPLIED TO THIS FEED.</b> No verdict
+          is shown, which is not the same as quiet.</Note>
+      ) : !w ? (
+        <Note hook="data-live-watch-absent">The watch has written no row for this system yet.</Note>
+      ) : (
+        <>
+          {!w.current ? (
+            <Note hook="data-live-watch-behind"><b>THE WATCH IS BEHIND THIS ADVISORY.</b> Its newest
+              rows are from {fmtUTC(w.asOf)}; the advisory above is newer.</Note>
+          ) : null}
+          {w.alerts.map((a) => (
+            <div key={a.id} className={`at-live-w ${WATCH_CLASS[a.state] || ""}`} data-live-watch-row={a.state}>
+              <div className="at-live-w-k"><b>{a.state}</b><span>{a.label}</span><em>{a.kind}</em></div>
+              {a.reasons.slice(0, 2).map((t, i) => <p key={i}>{t}</p>)}
+            </div>
+          ))}
+          {w.refused.length ? (
+            <div className="at-live-w at-live-w-ref" data-live-watch-row="INSUFFICIENT">
+              <div className="at-live-w-k"><b>INSUFFICIENT</b><span>{w.refused.length} exposure{w.refused.length > 1 ? "s" : ""} — the watch refused to judge</span></div>
+              {w.refused[0].reason ? <p>{w.refused[0].reason}</p> : null}
+            </div>
+          ) : null}
+          {w.quiet.length ? (
+            <div className="at-live-w-q" data-live-watch-row="QUIET" title={w.quiet.join(" · ")}>
+              <b>QUIET</b> {w.quiet.length} of {w.quiet.length + w.alerts.length + w.refused.length} registered exposures
+            </div>
+          ) : null}
+          <p className="at-live-w-foot">Registered exposures only, each row naming its provenance.
+            Counts of runs, never probabilities.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* A LABELLED READING, NOT A LEADER-DOT ROW.
  *
  * `Row` sets a short label against a right-aligned figure across a leader, which is the right
@@ -80,7 +172,7 @@ function Reading({ label, qualifier, value, derived, dim, title }) {
  *   latest: {lat, lon, kt, t, stage}, genesis: {lat, lon, t, stage}|null, separationKm,
  *   separationHours, firstFix: {lat, lon, t, stage}, ageHours, cohortRadiusKm, drops: [] }
  */
-function System({ sys, onLaunch, current }) {
+export function System({ sys, onLaunch, current }) {
   const g = sys.genesis;
   const l = sys.latest;
   const kt = l.kt === null || l.kt === undefined ? "\u2014" : `${l.kt} kt`;
@@ -120,9 +212,17 @@ function System({ sys, onLaunch, current }) {
             value={`${Math.round(sys.separationKm)} km in ${
               Math.round(sys.separationHours)} h since genesis`} />
 
+          <ForecastNow fc={sys.fc} />
+
           {current ? (
             <Note style={{ marginTop: 7 }} hook="data-launch-current">
               <b>This cohort is already keyed to this system&rsquo;s derived genesis.</b>
+              {sys.fc && sys.fc.state === "ok" ? (
+                <>{" "}<button type="button" className="at-live-jump" data-live-jump
+                  onClick={() => { const el = document.querySelector("[data-forward-row]");
+                    if (el) el.scrollIntoView({ block: "start", behavior: "auto" }); }}>
+                  ITS FORECAST AGAINST THIS COHORT ↓</button></>
+              ) : null}
             </Note>
           ) : (
             <>
@@ -160,6 +260,7 @@ function System({ sys, onLaunch, current }) {
             value="— this system has no tropical fix" />
           <Reading label="LATEST FIX" dim
             value={`${DEG(l.lat, l.lon)} · ${fmtUTC(l.t)}`} />
+          <ForecastNow fc={sys.fc} />
           <Note style={{ marginTop: 7 }} hook="data-launch-refused">
             <b>NO LAUNCH — THIS SYSTEM HAS NOT FORMED.</b> Its record begins as a disturbance and
             holds no tropical fix, so it has no genesis under the archive&rsquo;s own rule. The
@@ -198,6 +299,79 @@ export function ActiveSystems({ systems, generatedAt, onLaunch, currentId }) {
         <System key={sys.atcf_id} sys={sys} onLaunch={onLaunch}
           current={currentId === sys.atcf_id} />
       ))}
+    </div>
+  );
+}
+
+/* THE LIVE STRIP — the same systems, at the top of the instrument instead of inside an editor.
+ *
+ * WHY IT MOVED. The launcher sat in the clause editor's sheet, under THE QUESTION and above the
+ * condition stack -- the right place in the editor and the wrong place in the product: a reader
+ * who came to the Atlas because a storm is on the water right now had to know that pressing a
+ * clause of a sentence would reveal it. The strip names every tracked system on the top bar, and
+ * pressing one opens exactly the card the editor held -- both positions, their separation, what
+ * a clean launch discards -- so nothing it said is lost and nothing is launched without it.
+ */
+export function LiveStrip({ systems, generatedAt, onLaunch, currentId, feed = null }) {
+  const [open, setOpen] = React.useState(null);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(null); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(null); } };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey, true); };
+  }, [open]);
+  if (!systems || !systems.length) return null;
+  const sys = open ? systems.find((x) => x.atcf_id === open) : null;
+  return (
+    <div className="lv" data-live-strip ref={ref}>
+      {/* LIVE IS A CLAIM ABOUT THE FEED, MEASURED ON THIS BROWSER'S CLOCK. Past the artifact's own
+          freshness bound the word is replaced by the feed's age, so a file nobody has rewritten
+          cannot keep a green LIVE over storms last read days ago. */}
+      <span className={feed && feed.stale ? "lv-k lv-k-stale" : "lv-k"} data-live-feed={feed && feed.stale ? "stale" : "live"}
+        title={`operational records read ${generatedAt ? fmtUTC(Date.parse(generatedAt)) : "at an unknown time"}${
+          feed && Number.isFinite(feed.hours) ? ` · ${ageText(feed.hours)} ago by this browser's clock` : ""}`}>
+        <i className={feed && feed.stale ? "lv-dot lv-dot-stale" : "lv-dot"} aria-hidden="true" />
+        {feed && feed.stale ? `FEED ${ageText(feed.hours)} OLD` : "LIVE"}
+      </span>
+      {systems.map((x) => (
+        <button type="button" key={x.atcf_id} className="lv-sys" data-live-system={x.atcf_id}
+          aria-expanded={open === x.atcf_id ? "true" : "false"}
+          aria-pressed={currentId === x.atcf_id ? "true" : "false"}
+          onClick={() => {
+            /* ONE PRESS, WHEN NOTHING IS LOST BY IT. With no condition set, a clean launch
+               discards nothing, so the press both keys the cohort and opens the card. With
+               conditions set, the card opens first and says what the launch would discard. */
+            if (open !== x.atcf_id && x.genesis && !x.drops.length && currentId !== x.atcf_id) onLaunch(x);
+            setOpen(open === x.atcf_id ? null : x.atcf_id);
+          }}
+          title={`${x.name} ${x.atcf_id} — ${x.stage_label}.${x.genesis && !x.drops.length ? " Keys the cohort to its derived genesis and opens its card." : " Open the launch card."}`}>
+          <b>{x.name}</b>
+          <span className="lv-meta">{x.atcf_id.slice(0, 4)} · {x.latest.kt === null || x.latest.kt === undefined ? "—" : `${x.latest.kt} kt`}</span>
+          <WatchMark fc={x.fc} />
+          {currentId === x.atcf_id ? <span className="lv-on">KEYED</span> : null}
+        </button>
+      ))}
+      {sys ? (
+        <div className="lv-pop" role="dialog" aria-label={`${sys.name} — launch a historical cohort`} data-live-card>
+          <Note hook="data-active-systems-scope">
+            An <b>operational</b> record — NHC&rsquo;s ATCF best track, revised while the storm is
+            live. Launching builds a cohort from the <b>historical archive</b>; no operational
+            value enters it, and this system is not one of its members.
+          </Note>
+          {feed && feed.stale ? (
+            <Note hook="data-live-feed-stale">
+              <b>THIS FEED IS {ageText(feed.hours).toUpperCase()} OLD.</b> Every operational value
+              below was last read {generatedAt ? fmtUTC(Date.parse(generatedAt)) : "at an unknown time"}
+              and has not been refreshed since.
+            </Note>
+          ) : null}
+          <System sys={sys} current={currentId === sys.atcf_id}
+            onLaunch={(s) => { onLaunch(s); }} />
+        </div>
+      ) : null}
     </div>
   );
 }

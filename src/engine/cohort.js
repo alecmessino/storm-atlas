@@ -410,11 +410,13 @@ const K = {
  * a condition on the population. Folding it into the spec would make two identical cohorts stop
  * comparing equal because different storms happened to be selected, and would put a storm into
  * the citation line as though it narrowed the question. */
-/* `atcf` is the pipeline's bridge: the original board names a live storm by its ATCF id (it has
+/* `atcf` is the pipeline's bridge: a live board names a live storm by its ATCF id (it has
  * no archive storm_id to name it by), and the Atlas resolves that to the archive row the same way
  * the operational layer joins — uppercased exact match on the atcf_id column, season checked. A
- * surface key for the same reason `storm` is: it selects, it does not condition. */
-export const RESERVED_QUERY_KEYS = Object.freeze(["m", "view", "contract", "storm", "atcf"]);
+ * surface key for the same reason `storm` is: it selects, it does not condition.
+ * `seal` is the member fingerprint a link was sealed over (engine/seal.js). It checks the cohort
+ * on open; it does not define one. */
+export const RESERVED_QUERY_KEYS = Object.freeze(["m", "view", "contract", "storm", "atcf", "seal"]);
 
 export function toQuery(spec) {
   const s = normalise(spec);
@@ -584,16 +586,32 @@ export function cohortResult(archive, spec, { regions = ALL_REGIONS, members = f
      The MEASURED FINDING is reproduced verbatim, because rewording a finding is how a finding
      stops being one -- and check-atlas-dom pins that wording. Only the closing remedy differs:
      the analog query tells a caller to pass min_pool_season, and a cohort has a season floor
-     instead, so it names the control the reader actually has. */
+     instead, so it names the control the reader actually has.
+
+     WHOSE STORMS, AND WHEN IT FIRES -- both corrected in methodology 1.1.1, with analogs.py and
+     analogs.js, which carry the same fix.
+       - It counts EAST PACIFIC members from before 1971, because that is what the finding
+         measured. It used to count every pre-1971 member, so an Atlantic-only cohort was told
+         its rates were biased LOW by a Pacific observing gap; this archive's Atlantic Cat 3
+         share shows no such step (analogs.py has the decades).
+       - It fires whenever there are any, unless the declared floor is 1971 or later. It used to
+         need `seasonFrom === null`, so ANY floor silenced it -- a floor of 1900, or the "19" a
+         reader is half-way through typing into the year box, kept seventy pre-satellite seasons
+         in the cohort and said nothing about them.
+     The wording keeps "before 1971, when East Pacific intensities were estimated", which
+     check-atlas-dom pins, and "those storms" says whose bias it is in a mixed cohort. */
   let early = 0;
-  for (const c of cases) if (c.season && c.season < 1971) early++;
-  if (early && s.seasonFrom === null) {
+  for (const c of cases) {
+    if (c.season && c.season < 1971 && S.str("basin", c.row) === "EP") early++;
+  }
+  if (early && !(s.seasonFrom !== null && s.seasonFrom >= 1971)) {
     gaps.push(
-      `${early} of ${cases.length} storms in this cohort are from before 1971, when East ` +
-      "Pacific intensities were estimated without geostationary satellites or Dvorak analysis " +
-      "and major hurricanes were under-observed (measured: 1.7% Cat 3 in the 1960s vs 20-30% " +
-      "from the 1970s on). Intensity rates above are therefore biased LOW. Set a season floor " +
-      "of 1971 to restrict the cohort to the reliably-observed era.");
+      `${early} of ${cases.length} storms in this cohort are East Pacific storms from before ` +
+      "1971, when East Pacific intensities were estimated without geostationary satellites or " +
+      "Dvorak analysis and major hurricanes were under-observed (measured: 1.7% Cat 3 in the " +
+      "1960s vs 20-30% from the 1970s on). Intensity rates above are therefore biased LOW by " +
+      "those storms. Set a season floor of 1971 to restrict the cohort to the reliably-observed " +
+      "era.");
   }
 
   /* RULE 4, surfaced at the cohort level. The intensity filter could not judge these storms

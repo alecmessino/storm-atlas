@@ -68,7 +68,10 @@ export function QuestionSentence({ segments = [], onEdit, onClear }) {
        height from the plate, which is why the head row is `auto` and the plate row is the
        elastic one. The whole sentence is also the element's title, so a gate and a hover both
        find the text even in the states where a clause wraps. */
-    <p className="at-question-text" data-question
+    /* THE QUESTION IS THE PAGE'S HEADING. It was a paragraph, and the surface had no h1 at all:
+       a screen reader's heading list was empty on the one page whose whole subject is this
+       sentence. */
+    <h1 className="at-question-text" data-question
       title={segments.map((s) => s.text).join("")}>
       {segments.map((seg, i) => {
         if (!seg.zone) return <span key={i}>{seg.text}</span>;
@@ -76,7 +79,7 @@ export function QuestionSentence({ segments = [], onEdit, onClear }) {
           <Clause key={i} seg={seg} onEdit={onEdit} onClear={onClear} />
         );
       })}
-    </p>
+    </h1>
   );
 }
 
@@ -99,7 +102,9 @@ function Clause({ seg, onEdit, onClear }) {
      connection between what they pressed and what appeared. */
   const open = onEdit ? (e) => onEdit(seg.zone, e.currentTarget) : undefined;
   return (
-    <>
+    /* THE CLAUSE AND ITS × BREAK TOGETHER. Both are buttons -- atomic boxes a line may break
+       between -- and a × wrapped alone to the next line read as a stray mark before the dash. */
+    <span className="at-clause-pair">
       <button type="button"
         className={`at-clause at-zone at-zone-${zone.rule}${set ? "" : " at-zone-empty"}`}
         data-zone={seg.zone} data-zone-edit={seg.zone}
@@ -124,7 +129,7 @@ function Clause({ seg, onEdit, onClear }) {
           onClick={() => onClear(seg.key)} title={`remove: ${seg.text}`}
           aria-label={`remove condition ${seg.text}`} />
       ) : null}
-    </>
+    </span>
   );
 }
 
@@ -145,7 +150,7 @@ function Clause({ seg, onEdit, onClear }) {
  * @param {Array}   [props.scope]     the scope-zone conditions, for the scope control's words
  */
 export function CohortLine({ kept, total, sufficient, minSample, conditions = [], scope = [],
-  lastEdit = null, onEdit, onReset, children }) {
+  lastEdit = null, onEdit, onReset, add = null, children }) {
   const narrowed = total !== undefined && total !== null && kept !== total;
   const scopeWords = scope.length
     ? scope.map((c) => c.value || c.sentence).join(" · ")
@@ -179,6 +184,10 @@ export function CohortLine({ kept, total, sufficient, minSample, conditions = []
 
       <LastEdit lastEdit={lastEdit} />
 
+      {/* THE CONDITIONS STILL TO ADD SHARE THIS LINE. They were a row of their own under it --
+          thirty pixels of the first screen spent on a row the count line had room for. */}
+      {add}
+
       <span className="at-cohort-acts">
         {children}
         {/* RESET QUERY — ONE OF THREE WAYS OUT, AND THE ONLY ONE THAT TOUCHES THE QUESTION.
@@ -192,18 +201,48 @@ export function CohortLine({ kept, total, sufficient, minSample, conditions = []
             RESET QUERY
           </button>
         ) : null}
-        {/* THE BUILDER'S OWN OPENER, NAMED AS THE THING IT DOES. Every clause in the sentence
-            already opens the builder at its own zone; this opens it at the genesis side for a
-            reader who has decided to narrow the question before deciding how. It is the same
-            sheet, the same state and the same costs — one more door, not one more control. */}
-        {onEdit ? (
-          <button type="button" className="at-cohort-add" data-add-condition
-            onClick={(e) => onEdit("given", e.currentTarget)}
-            title="add a condition — the same editor every clause above opens">
-            + condition
-          </button>
-        ) : null}
       </span>
+    </div>
+  );
+}
+
+/* THE CONDITIONS A READER CAN STILL ADD, NAMED AS WHAT THEY ASK.
+ *
+ * "+ condition" was one control that opened the editor at the genesis side; everything else the
+ * archive can be asked -- months, basin, ever-entered, peak intensity, landfall, record scope --
+ * was reachable only by knowing that a clause of the sentence opens an editor with six sections.
+ * Each is named here, on the line under the question, and opens the editor AT its own section.
+ * A condition already set is not offered again: its clause in the sentence is its control.
+ * Outcome-side conditions carry the flag ink, because each one costs the ledger a row. */
+const ADDABLE = [
+  { section: "where", zone: "given", label: "where it formed", set: (s) => !!s.where },
+  { section: "season", zone: "given", label: "seasons", set: (s) => s.seasonFrom !== null || s.seasonTo !== null },
+  { section: "months", zone: "given", label: "months", set: (s) => !!(s.months && s.months.length) },
+  { section: "basin", zone: "given", label: "basin", set: (s) => !!(s.basins && s.basins.length) },
+  { section: "entered", zone: "given", label: "ever entered", set: (s) => !!(s.subbasinsEntered && s.subbasinsEntered.length) },
+  { section: "intensity", zone: "outcome", label: "peak intensity", set: (s) => s.intensity && s.intensity !== "all" },
+  { section: "landfall", zone: "outcome", label: "landfall", set: (s) => !!s.landfall },
+  /* No "+ record scope": the cohort line's own "scope · …" control is that condition, one
+     inch to the left, and two controls for one thing is one too many. */
+];
+
+export function AddConditions({ spec, onEdit }) {
+  if (!onEdit || !spec) return null;
+  const open = ADDABLE.filter((a) => !a.set(spec));
+  if (!open.length) return null;
+  return (
+    <div className="at-addc" data-add-conditions role="group" aria-label="add a condition">
+      <span className="at-addc-k">ADD</span>
+      {open.map((a) => (
+        <button type="button" key={a.section} className={`at-addc-b at-addc-${a.zone}`}
+          data-add-condition={a.section}
+          onClick={(e) => onEdit(a.zone, e.currentTarget, a.section)}
+          title={a.zone === "outcome"
+            ? `condition on ${a.label} — an outcome-side condition: the ledger stops reporting it as an outcome`
+            : `condition on ${a.label}`}>
+          + {a.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -217,7 +256,9 @@ function LastEdit({ lastEdit }) {
     <span className="at-lastedit" data-last-edit>
       <span className="at-lastedit-k">LAST EDIT</span>
       <span className="at-lastedit-v">
-        {lastEdit.from.toLocaleString()} → {lastEdit.to.toLocaleString()}
+        {lastEdit.from === lastEdit.to
+          ? <>no storm changed · {lastEdit.to.toLocaleString()}</>
+          : <>{lastEdit.from.toLocaleString()} → {lastEdit.to.toLocaleString()}</>}
       </span>
     </span>
   );
@@ -232,14 +273,14 @@ function LastEdit({ lastEdit }) {
  */
 export function QueryHead({ segments, conditions = [], scope = [], kept, total,
   sufficient, minSample, lastEdit = null, onEdit, onClear, onReset, notice = null,
-  children }) {
+  spec = null, children }) {
   return (
     <div className="at-head" data-condition-strip>
       {notice}
       <QuestionSentence segments={segments} onEdit={onEdit} onClear={onClear} />
       <CohortLine kept={kept} total={total} sufficient={sufficient} minSample={minSample}
         conditions={conditions} scope={scope} lastEdit={lastEdit}
-        onEdit={onEdit} onReset={onReset}>
+        onEdit={onEdit} onReset={onReset} add={<AddConditions spec={spec} onEdit={onEdit} />}>
         {children}
       </CohortLine>
     </div>

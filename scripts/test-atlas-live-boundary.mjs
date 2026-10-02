@@ -126,7 +126,7 @@ console.log("\n[A] the import graph — no historical module can reach the opera
   /* AND THE RENDERERS THAT DRAW THE ARCHIVE. The operational track has its own layer; the
      archive's layers must not learn about it, or a single flag would put an operational fix into
      the population the reader is comparing against. */
-  const ARCHIVE_LAYERS = ["render/selection-layer.js", "render/replay-layer.js",
+  const ARCHIVE_LAYERS = ["render/selection-layer.js",
     "render/population-layer.js", "render/atlas-layer.js", "render/pathway-layer.js"];
   for (const rel of ARCHIVE_LAYERS) {
     const seen = await reachable(rel);

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /* PUBLIC-SCHEMA GATE for the two live files this repo publishes.
  *
- * Whitelist, not blacklist: every key in docs/data/atlas-live-v1.json and docs/data/latest.json
+ * Whitelist, not blacklist: every key in docs/data/atlas-live-v1.json, docs/data/latest.json and
+ * docs/data/atlas-forecast-v1.json
  * must appear in the approved schema below, at the path where it appears. Anything else fails:
  * a new field is a publication decision, and it has to be made here, in review.
  *
@@ -40,6 +41,22 @@ const RECORD = {
   ships_rt: SHIPS, source: SOURCE, active: "*",
 };
 const IDS = ["*"];
+/* atlas-forecast-v1.json: the official advisory, NHC's cone, the guidance family runs and the
+   disagreement watch's newest row per PUBLIC coast exposure, as first seen by the capture. */
+const WATCH_ROW = {
+  geometry: "*", label: "*", provenance_kind: "*", state: "*", known_at: "*", advisory: "*", cycle: "*",
+  lead_h: "*", thresholds_in_sample: "*", reasons: [{ code: "*", text: "*" }],
+  outline: { kind: "*", buffer_km: "*", lines: [[["*"]]], lat: "*", lon: "*", r_km: "*" },
+};
+const FORECAST = {
+  atcf_id: "*", ok: "*", error: "*", known_at: "*", advisory: "*", advisory_base: "*", issued: "*",
+  trackPoints: [{ validZ: "*", at: ["*"], kt: "*", hr: "*", kind: "*" }],
+  cone: { kind: "*", advisory: "*", matches_tcm: "*", rings: [[["*"]]] },
+  source: { product: "*", source_url: "*", first_seen: "*", sha256: "*" },
+  guidance: { cycle: "*", age_h: "*", first_seen: "*", missing: ["*"], stale: [{ family: "*", newest_cycle: "*" }],
+    runs: [{ id: "*", family: "*", track: [["*"]] }], members_cycle: "*", member_count: "*", source: "*" },
+  watch: { engine: "*", as_of: "*", evaluated_this_state: "*", worst: "*", rows: [WATCH_ROW], note: "*" },
+};
 export const SCHEMAS = {
   "atlas-live-v1.json": {
     schema: "*", generated_at: "*",
@@ -49,12 +66,18 @@ export const SCHEMAS = {
       missing_atcf_ids: IDS, retained_atcf_ids: IDS, stale_atcf_ids: IDS },
     storms: { $map: ATCF, $of: RECORD },
   },
+  "atlas-forecast-v1.json": {
+    schema: "*", generated_at: "*",
+    source: { name: "*", kind: "*", note: "*" },
+    watch: { supplied: "*", engine: "*" },
+    storms: { $map: ATCF, $of: FORECAST },
+  },
   "latest.json": {
     schema: "*", generatedAt: "*",
     storms: [{ id: "*", name: "*", trackPoints: [{ at: ["*"], hr: "*", validZ: "*", kt: "*", gustKt: "*" }] }],
   },
 };
-export const FIXED = { "atlas-live-v1.json": { schema: "atlas-live-v1" }, "latest.json": { schema: "storm-atlas-official-v1" } };
+export const FIXED = { "atlas-live-v1.json": { schema: "atlas-live-v1" }, "atlas-forecast-v1.json": { schema: "atlas-forecast-v1" }, "latest.json": { schema: "storm-atlas-official-v1" } };
 
 /* Keys that must never appear anywhere, whatever the schema says. */
 const FORBIDDEN_KEY = /(kalshi|market|contract|edge|kelly|stake|odds|price|bet|terminal|polymarket|ticker|position|pnl|wager)/i;
@@ -91,8 +114,25 @@ export function check(obj, spec, path = "$", errs = []) {
   return errs;
 }
 
+/* Value rules the shape cannot express. The forecast file publishes watch rows for PUBLIC
+   exposures only, and it is an as-of record: nothing in it was first seen after its own instant. */
+function forecastRules(obj, errs) {
+  const T = Date.parse(obj.generated_at);
+  if (!Number.isFinite(T)) { errs.push("$.generated_at: not an instant"); return; }
+  for (const [id, s] of Object.entries(obj.storms || {})) {
+    if (!s || !s.ok) continue;
+    for (const [k, v] of [["known_at", s.known_at], ["source.first_seen", s.source && s.source.first_seen], ["guidance.first_seen", s.guidance && s.guidance.first_seen]]) {
+      if (v != null && !(Date.parse(v) <= T)) errs.push(`$.storms.${id}.${k}: after generated_at`);
+    }
+    for (const [i, r] of ((s.watch && s.watch.rows) || []).entries()) {
+      if (r.provenance_kind !== "PUBLIC") errs.push(`$.storms.${id}.watch.rows[${i}]: exposure is not PUBLIC`);
+      if (!(Date.parse(r.known_at) <= T)) errs.push(`$.storms.${id}.watch.rows[${i}].known_at: after generated_at`);
+    }
+  }
+}
 function checkFile(name, obj) {
   const errs = check(obj, SCHEMAS[name]);
+  if (name === "atlas-forecast-v1.json") forecastRules(obj, errs);
   for (const [k, v] of Object.entries(FIXED[name])) if (obj[k] !== v) errs.push(`$.${k}: expected ${JSON.stringify(v)}, got ${JSON.stringify(obj[k])}`);
   return errs;
 }
@@ -101,6 +141,8 @@ function selfTest() {
   const live = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-live-v1.json"), "utf8"));
   const off = JSON.parse(readFileSync(resolve(ROOT, "docs/data/latest.json"), "utf8"));
   const id = Object.keys(live.storms)[0];
+  const fc = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-forecast-v1.json"), "utf8"));
+  const fid = Object.keys(fc.storms).find((k) => fc.storms[k].ok && fc.storms[k].watch && fc.storms[k].watch.rows.length);
   const mut = (o, f) => { const c = structuredClone(o); f(c); return c; };
   const cases = [
     ["live: clean", "atlas-live-v1.json", live, 0],
@@ -115,6 +157,13 @@ function selfTest() {
     ["live: email in a note", "atlas-live-v1.json", mut(live, (c) => { c.source.note = "ask someone@example.invalid"; }), 1],
     ["live: repo link in a url", "atlas-live-v1.json", mut(live, (c) => { c.source.url = "https://github.com/alecmessino/category-alpha"; }), 1],
     ["live: internal route", "atlas-live-v1.json", mut(live, (c) => { c.source.note = "see /briefs/ledger"; }), 1],
+    ["forecast: clean", "atlas-forecast-v1.json", fc, 0],
+    ["forecast: a non-PUBLIC watch row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].provenance_kind = "SYNTHETIC"; }), 1],
+    ["forecast: a packet id on a row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].packet_id = "f"; }), 1],
+    ["forecast: a capture run id", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.capture_run = "x"; }), 1],
+    ["forecast: advisory first seen after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].source.first_seen = "2999-01-01T00:00:00Z"; }), 1],
+    ["forecast: watch row known after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].known_at = "2999-01-01T00:00:00Z"; }), 1],
+    ["forecast: a filesystem path in a note", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.note = "/home/user/x"; }), 1],
   ];
   let bad = 0;
   for (const [n, f, o, want] of cases) {

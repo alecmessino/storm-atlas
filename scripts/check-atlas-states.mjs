@@ -94,7 +94,7 @@ const AUDIT = () => {
   const bad = [];
   const seen = [];
   const PCT = /\d[\d,.]*\s*%/;
-  const shell = document.querySelector(".atlas-instrument");
+  const shell = document.querySelector(".atlas-v2");
   if (!shell) { bad.push("the instrument did not render"); return { bad, seen }; }
 
   /* THE READING ORDER, AND IT IS THE COMPOSITION. The declared first band -- the question, then
@@ -106,15 +106,30 @@ const AUDIT = () => {
      `.atlas-above` is the box the head and the band share so that the plate and the answer end
      on one baseline; its own two children are asserted below, because a wrapper that could hold
      anything in any order would make this check say nothing. */
-  const order = [...shell.children].map((c) => c.className.split(" ")[0]);
-  const want = ["atlas-above", "atlas-transport", "atlas-evidence", "at-colophon"];
-  const above = shell.querySelector(".atlas-above");
-  const inner = above ? [...above.children].map((c) => c.className.split(" ")[0]) : [];
-  if (JSON.stringify(inner) !== JSON.stringify(["at-head", "atlas-plate-row"])) {
-    bad.push(`the declared band holds ${JSON.stringify(inner)}`);
+  /* THE SECOND SHELL'S ORDER: the top bar, then <main> -- the question, then the work band of
+     plate and inspector -- then the forward view when a live system keys the cohort, then the
+     record below the fold, then the colophon. The skip link precedes all of it and prints nothing
+     until focused; the seal and readings dialogs follow the colophon only while open. */
+  const order = [...shell.children].map((c) => c.className.split(" ")[0])
+    /* v2-mnav is the phone's bottom bar: fixed, and not displayed at a desktop width. */
+    .filter((c) => !["v2-skip", "sl-veil", "at-sheet", "v2-mnav"].includes(c));
+  /* AND THE EXCLUSION IS EARNED, NOT GRANTED BY A CLASS NAME. This gate runs at desktop widths,
+     where the phone bar is not displayed; anything carrying v2-mnav that IS displayed here would
+     be a row the order check above cannot see, so it is a failure in its own right. */
+  for (const el of shell.querySelectorAll(":scope > .v2-mnav")) {
+    if (getComputedStyle(el).display !== "none") {
+      bad.push("a v2-mnav element is displayed at a desktop width -- the phone bar must not be a row here");
+    }
   }
-  if (JSON.stringify(order.slice(0, 4)) !== JSON.stringify(want)) {
-    bad.push(`row order is ${JSON.stringify(order.slice(0, 4))}`);
+  const want = ["v2-top", "v2-main", "v2-below", "at-colophon"];
+  const seq = order.filter((c) => c !== "atlas-forward");
+  const main = shell.querySelector("main#atlas-main");
+  const inner = main ? [...main.children].map((c) => c.className.split(" ")[0]) : [];
+  if (JSON.stringify(inner) !== JSON.stringify(["v2-q", "v2-work"])) {
+    bad.push(`the main band holds ${JSON.stringify(inner)}`);
+  }
+  if (JSON.stringify(seq.slice(0, 4)) !== JSON.stringify(want)) {
+    bad.push(`row order is ${JSON.stringify(order)}`);
   }
   /* AND THE PLATE AND THE ANSWER ARE SIMULTANEOUS, which is still the whole architecture: a
      reader reads a rate while looking at what is drawn. What changed is WHICH evidence sits
@@ -197,7 +212,7 @@ const AUDIT = () => {
    * The second is what panel rule 4 actually protects, and it is strictly stronger than the flat
    * "every row has a cell" this replaced: that version passed on a deck whose refusal had a cell
    * and no word in it. */
-  const hasStatusColumn = !!document.querySelector(".at-deck-head .at-dc-status");
+  const hasStatusColumn = !!document.querySelector(".at-deck-head .at-dc-status, [data-ledger]");
   for (const row of document.querySelectorAll("[data-outcome]")) {
     const name = row.getAttribute("data-outcome");
     /* THE ROW DECLARES ITS OWN STATE; THE EXPLANATION IS ELSEWHERE. This read `[data-refusal]`
@@ -221,7 +236,7 @@ const AUDIT = () => {
          whole row flagged it, which was a false positive in this audit rather than a bug on the
          surface. What must carry no percentage is the row's DATA CELLS: the place a reader looks
          for a number. */
-      const cells = [...row.querySelectorAll(".at-dc")]
+      const cells = [...row.querySelectorAll(".at-dc, .at-dc-rate, .at-dc-count, .at-dc-int, .at-dc-vs")]
         .map((c) => c.textContent || "").join(" ");
       if (PCT.test(cells)) {
         bad.push(`${name}: refused, yet a percentage appears in a data cell`);
@@ -249,7 +264,7 @@ const AUDIT = () => {
   for (const c of document.querySelectorAll("[data-condition-zone]")) {
     seen.push("condition:" + c.getAttribute("data-condition-zone"));
   }
-  return { bad, seen };
+  return { bad, seen, rows: document.querySelectorAll("[data-outcome]").length };
 };
 
 /* Pick real storms out of the pack for the states a query cannot construct. */
@@ -292,10 +307,9 @@ const STATES = [
   ["pre-genesis storm", `storm=${picks.preGenesis || picks.plain}`, 1440, 900],
   ["storm inside its own cohort", `i=cat4&storm=${picks.plain}`, 1440, 900],
   ["storm outside the cohort", `i=cat5&s0=2020&storm=${picks.plain}`, 1440, 900],
-  /* NOT "m=replay": `m` is the METHODOLOGY VERSION on this surface, and setting it to a mode
-     name makes the surface correctly report a methodology mismatch. Replay is entered through
-     the builder's mode chip, which is where a reader enters it. */
-  ["replay mid-life", "__replay__", 1440, 900],
+  /* THE ONE CLOCK LEFT ON THE SURFACE, MID-LIFE: a selected storm with its transport's cursor
+     part-way along the track. The archive replay this state used to enter is gone. */
+  ["storm transport mid-life", "__storm__", 1440, 900],
   ["narrow workstation", "", 1280, 800],
   ["narrower still", "", 1180, 800],
   ["the collapse width", "", 1100, 800],
@@ -306,17 +320,33 @@ const STATES = [
 console.log("[states] the invariants hold in every state a reader can reach");
 const coverage = new Set();
 for (const [name, query, w, h] of STATES) {
-  await open(query === "__replay__" ? "" : query, w, h);
-  if (query === "__replay__") {
-    /* Entered the way a reader enters it: open the builder, click the mode chip. */
-    const opener = await page.$("[data-zone-edit]");
-    if (opener) { await opener.click(); await page.waitForTimeout(250); }
-    const chip = await page.$('[data-chip="mode-replay"]');
-    if (chip) { await chip.click(); await page.waitForTimeout(900); }
-    const close = await page.$("[data-sheet-close]");
-    if (close) { await close.click(); await page.waitForTimeout(400); }
+  await open(query === "__storm__" ? "" : query, w, h);
+  if (query === "__storm__") {
+    await page.evaluate(() => {
+      const a = globalThis.__ATLAS.archive;
+      let row = 0;
+      for (let i = 0; i < a.nStorms; i++) if (a.storms.str("name", i) === "PATRICIA" && a.storms.num("season", i) === 2015) row = i;
+      globalThis.__ATLAS_SELECT(row);
+    });
+    await page.waitForTimeout(600);
+    const tp = await page.$("[data-transport] input[type=range], .at-transport input[type=range]");
+    if (tp) { await tp.focus(); for (let i = 0; i < 20; i++) await page.keyboard.press("ArrowRight"); }
+    await page.waitForTimeout(500);
   }
-  const { bad, seen } = await page.evaluate(AUDIT);
+  let { bad, seen, rows } = await page.evaluate(AUDIT);
+  /* A SELECTED STORM OPENS ON ITS RECORD TAB, where no ledger row is rendered -- so the per-row
+     rules above would loop over nothing in every storm state. The ledger WITH the subject's
+     REACHED / NO tags is one press away, and it is audited there: both the record as it opens
+     and the ledger as the reader switches to it, and the row loop must actually visit rows. */
+  if (!rows && await page.$("[data-tab-btn='outcomes']")) {
+    await page.click("[data-tab-btn='outcomes']");
+    await page.waitForTimeout(500);
+    const second = await page.evaluate(AUDIT);
+    bad = [...bad, ...second.bad];
+    seen = [...seen, ...second.seen];
+    rows = second.rows;
+    if (!rows) bad.push("the OUTCOMES tab rendered no ledger rows to audit");
+  }
   seen.forEach((x) => coverage.add(x));
   ok(`${name.padEnd(30)} ${w}x${h}`, bad.length === 0 && errors.length === 0,
      [...bad, ...errors].join("\n"));
@@ -339,8 +369,8 @@ console.log("\n[states] answer density at 1440x900 — the acceptance target");
       return b.width > 0 && b.height > 0 && b.top >= -1 && b.bottom <= innerHeight + 1
         && b.left >= -1 && b.right <= innerWidth + 1; };
     const rows = [...document.querySelectorAll("[data-finding]")];
-    const rates = rows.map((r) => r.querySelector(".at-ans-rate")).filter(Boolean);
-    const quals = rows.map((r) => r.querySelector(".at-ans-st"))
+    const rates = rows.map((r) => r.querySelector(".lg-rate")).filter(Boolean);
+    const quals = rows.map((r) => r.querySelector(".lg-st"))
       .filter((e) => e && vis(e) && e.textContent.trim())
       .concat([...document.querySelectorAll("[data-limits-pointer]")].filter(vis));
     return {
@@ -348,13 +378,16 @@ console.log("\n[states] answer density at 1440x900 — the acceptance target");
       /* THE DENOMINATOR TRAVELS WITH THE NUMERATOR ON EVERY ROW, so the cohort is stated both as
          the effective sample above the ladder and as `n / N` on each finding. */
       cohort: vis(document.querySelector("[data-cohort-size]"))
-        && rows.some((r) => vis(r.querySelector(".at-ans-sup") || r)),
+        && rows.some((r) => vis(r.querySelector(".lg-sup") || r)),
       map: vis(document.querySelector(".at-plate")),
       outcomes: rates.filter(vis).length > 0,
       qualification: quals.length > 0,
-      /* THE WHOLE LADDER, NOT ITS FIRST RUNG. Eight findings is the contract's number and every
-         one of them is above the fold at this viewport. */
-      allEight: rows.length === 8 && rows.every(vis),
+      /* THE WHOLE INTENSITY LADDER, NOT ITS FIRST RUNG. The ledger carries every contract now and
+         scrolls inside the inspector for the landfall regions; what must be above the fold with
+         nothing scrolled is the ordered scale the archive is built on -- all six rungs. */
+      ladder: (() => { const lad = rows.filter((r) => /^int:/.test(r.getAttribute("data-lens-row") || "")
+          || /^(TROPICAL STORM|CATEGORY [1-5])$/.test(r.getAttribute("data-outcome") || ""));
+        return lad.length === 6 && lad.every(vis); })(),
       rows: rows.length, visible: rows.filter(vis).length,
     };
   });
@@ -364,7 +397,7 @@ console.log("\n[states] answer density at 1440x900 — the acceptance target");
   let hits = 0;
   for (const k of Object.keys(names)) { if (d[k]) hits++; ok(names[k], d[k]); }
   ok(`answer density is ${hits} of 5`, hits === 5, `${hits} of 5`);
-  ok("and the whole eight-row answer needs 0px of scroll", d.allEight,
+  ok("and the whole intensity ladder needs 0px of scroll", d.ladder,
      `${d.visible} of ${d.rows} findings on screen`);
 }
 

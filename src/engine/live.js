@@ -106,35 +106,63 @@ export async function loadLive(baseUrl, { signal } = {}) {
    THE OFFICIAL FORECAST — CARRIED, NEVER PRODUCED, AND NEVER COPIED INTO THIS ARTIFACT.
    ───────────────────────────────────────────────────────────────────────────────────────── */
 
-/* WHY IT IS READ FROM the forecast payload RATHER THAN EMITTED INTO atlas-live-v1.json.
+/* WHERE THE OFFICIAL FORECAST COMES FROM: THE CAPTURE, VIA atlas-forecast-v1.json.
  *
- * The pipeline already fetches and parses NHC's forecast: docs/data/latest.json carries
- * `storms[].trackPoints` — valid time, position, wind, gust — per active system. Copying nine
- * points into the Atlas's own artifact would pay for the same bytes twice AND put a second copy
- * on a different refresh cadence from the first, so two surfaces could disagree about the
- * current advisory while both were "fresh".
+ * It used to be read from the forecast payload (latest.json), which carries the advisory but
+ * not the cone, the guidance or the instant each was first seen. The capture reads the NHC
+ * forecast advisory (TCM) on every run and keeps the first instant it saw each one; the feed
+ * writes the advisory in force at the newest capture instant into a small file beside the live
+ * artifact, in the SAME trackPoints shape, so `officialPoints` below reads it unchanged.
  *
- * AND IT IS OUTSIDE THE ATLAS'S BYTE GATE. `bench-atlas.mjs` sweeps every .gz and .json in
- * docs/storm-atlas/data/; latest.json is not in it. Measured: 1,088,528 B raw, 80,726 B gzipped
- * as GitHub Pages serves it — 5.8% of what the pack already pulls on its critical path, and
- * fetched only when a reader asks for the forward view, never on first paint.
+ * The same file carries what the watch evaluates at that instant -- the GIS cone, the guidance
+ * family runs -- and the watch's own newest verdict per registered exposure. All of it is
+ * operational and carried: nothing in it is produced in the browser, and none of it reaches the
+ * archive (scripts/test-atlas-live-boundary.mjs holds the wall).
  *
  * FAIL OPEN. A forward view without a forecast is still a forward view of the archive; a
  * forecast that will not load must degrade to "no official forecast loaded", never to a stub
  * that looks like one. */
-/* WHERE THE OFFICIAL FORECAST ACTUALLY SHIPS, and it is not in this artifact's data directory.
- *
- * `latest.json` is the forecast payload. It lives at `docs/data/latest.json` -- a sibling of
- * `docs/storm-atlas/`, not a file inside it -- and reading it rather than minting an Atlas copy
- * is the whole point: the forward view adds no byte to the packs the transfer gate sweeps.
- *
- * The path is relative to the Atlas's own DATA BASE (`data`, beside index.html), so it climbs
- * twice: out of `data/` and out of `storm-atlas/`. An earlier draft wrote `../data/latest.json`,
- * which climbs once and resolves to `storm-atlas/data/latest.json` -- a file that does not exist,
- * a fetch that 404s, and a surface that would have reported "the forecast payload could not be
- * read" forever while looking entirely correct in review. scripts/test-atlas-forward.mjs now
- * resolves this string against the shell's base and asserts the file is on disk. */
-export const OFFICIAL_FILE = "latest.json";
+export const FORECAST_SCHEMA = "atlas-forecast-v1";
+export const OFFICIAL_FILE = "atlas-forecast-v1.json";
+
+/**
+ * The whole forecast layer: every active system's advisory, cone, guidance and watch rows.
+ * Never throws; a failure is an object that says so, so "not loaded" and "loaded, nothing in it"
+ * stay different answers.
+ */
+export async function loadForecast(baseUrl, { signal } = {}) {
+  try {
+    const res = await fetch(`${baseUrl}/${OFFICIAL_FILE}`, { signal });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, generatedAt: null, storms: {}, watch: null };
+    const json = await res.json();
+    if (!json || json.schema !== FORECAST_SCHEMA) {
+      return { ok: false, error: `unexpected schema ${JSON.stringify(json && json.schema)}`, generatedAt: null, storms: {}, watch: null };
+    }
+    return { ok: true, error: null, generatedAt: json.generated_at || null, storms: json.storms || {},
+      watch: json.watch || null, source: json.source || null };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e), generatedAt: null, storms: {}, watch: null };
+  }
+}
+
+/** One system's official forecast out of a loaded layer, in the shape the forward view reads. */
+export function officialFromForecast(layer, atcfId) {
+  const id = String(atcfId || "").trim().toUpperCase();
+  if (!id) return null;
+  if (!layer || !layer.ok) {
+    return { ok: false, error: (layer && layer.error) || "the forecast file was not read", atcf_id: id, points: [], vintage: null };
+  }
+  const rec = Object.prototype.hasOwnProperty.call(layer.storms, id) ? layer.storms[id] : null;
+  if (!rec || !rec.ok) {
+    return { ok: false, error: (rec && rec.error) || "no forecast for this system", atcf_id: id, points: [], vintage: null };
+  }
+  const parsed = officialPoints(rec, { generatedAt: layer.generatedAt });
+  parsed.vintage = { ...parsed.vintage,
+    source: "NHC forecast advisory (TCM), as first seen by the capture",
+    advisory: rec.advisory || null, issued: rec.issued || null,
+    first_seen: rec.source ? rec.source.first_seen : null };
+  return { ok: true, error: null, atcf_id: id, ...parsed };
+}
 
 /**
  * The official forecast for one ATCF id, with the vintage it came from.
@@ -152,19 +180,7 @@ export const OFFICIAL_FILE = "latest.json";
 export async function loadOfficialForecast(baseUrl, atcfId, { signal } = {}) {
   const id = String(atcfId || "").trim().toUpperCase();
   if (!id) return null;
-  try {
-    const res = await fetch(`${baseUrl}/${OFFICIAL_FILE}`, { signal });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, atcf_id: id, points: [], vintage: null };
-    const json = await res.json();
-    const storms = (json && json.storms) || [];
-    const rec = storms.find((s) => String(s && s.id || "").toUpperCase() === id) || null;
-    if (!rec) {
-      return { ok: false, error: "no forecast for this system", atcf_id: id, points: [], vintage: null };
-    }
-    return { ok: true, error: null, atcf_id: id, ...officialPoints(rec, json) };
-  } catch (e) {
-    return { ok: false, error: String((e && e.message) || e), atcf_id: id, points: [], vintage: null };
-  }
+  return officialFromForecast(await loadForecast(baseUrl, { signal }), id);
 }
 
 /**
@@ -199,7 +215,7 @@ export function officialPoints(rec, envelope) {
     points,
     dropped,
     vintage: {
-      source: "NHC official forecast, via the official forecast payload",
+      source: "NHC official forecast",
       payload_generated_at: (envelope && envelope.generatedAt) || null,
       /* The advisory's own instant: the first forecast point is tau 0, the analysis the rest of
          the forecast hangs off. This is the stamp a reader needs beside a placement. */
@@ -214,7 +230,7 @@ export function officialPoints(rec, envelope) {
 /**
  * Is `b` a newer authoritative vintage than `a`?
  *
- * THE ADVISORY'S VALID TIME DECIDES, NOT THE PAYLOAD'S. the forecast payload is regenerated
+ * THE ADVISORY'S VALID TIME DECIDES, NOT THE PAYLOAD'S. The forecast file is regenerated
  * every ten minutes and its `generatedAt` moves every time; the forecast inside it changes only
  * when NHC issues one. Comparing payload stamps would call every tick a new vintage and
  * recompute the placement for nothing, while a payload rebuilt from a STALE advisory would look
@@ -252,6 +268,25 @@ export class Live {
     this.stale = new Set(h.stale_atcf_ids || []);
     this.generatedAt = (artifact && artifact.generated_at) || null;
     this.health = h;
+    const f = (artifact && artifact.freshness) || {};
+    this.staleHours = Number.isFinite(f.active_stale_hours) ? f.active_stale_hours : null;
+  }
+
+  /**
+   * How old the FEED is by this browser's clock, and whether that is past the artifact's own
+   * freshness bound.
+   *
+   * WHY THIS IS NOT `stale_atcf_ids`. That list is decided when the file is written: a record is
+   * stale if it was already old THEN. A file nobody has rewritten for a week therefore carries an
+   * empty stale list and every record in it reads as current -- which is how a header came to
+   * say LIVE over storms last read seven days earlier. The bound is the artifact's own
+   * `active_stale_hours`; only the clock it is measured against is new.
+   */
+  feedAge(nowMs) {
+    const g = Date.parse(this.generatedAt || "");
+    if (!Number.isFinite(g) || !Number.isFinite(nowMs)) return { hours: null, stale: !this.ok };
+    const hours = (nowMs - g) / 3600000;
+    return { hours, stale: this.staleHours !== null && hours > this.staleHours };
   }
 
   /**
@@ -324,6 +359,37 @@ export function rowOfAtcfId(archive, atcfId) {
     found = i;
   }
   return found;
+}
+
+/* WHY A BRIDGE ID DID OR DID NOT RESOLVE. `rowOfAtcfId` answers null for five different reasons,
+ * and the surface printed one sentence for all of them -- "NOT IN THIS ARCHIVE PACK YET", with a
+ * paragraph about IBTrACS publishing a running season late -- over a typo, an invest number and a
+ * 1998 storm alike. The row is still decided by `rowOfAtcfId` alone; this only names the reason.
+ *   resolved   a row carries the id
+ *   malformed  not BBNNYYYY
+ *   invest     number 90-99: a disturbance designator, which the archive of storms never holds
+ *   ambiguous  two rows claim it, refused rather than resolved to the first
+ *   past       the pack already holds a later season, so "not yet" would be false
+ *   pending    the id's season is the pack's newest or later: IBTrACS's lag is the likely reason */
+export function atcfResolution(archive, atcfId) {
+  const want = String(atcfId || "").trim().toUpperCase();
+  const m = /^(AL|EP|CP)(\d{2})(\d{4})$/.exec(want);
+  if (!m) return { row: null, reason: "malformed", id: want };
+  const row = rowOfAtcfId(archive, want);
+  if (row !== null) return { row, reason: "resolved", id: want };
+  const num = Number(m[2]);
+  if (num >= 90) return { row: null, reason: "invest", id: want };
+  let claims = 0;
+  let newest = -Infinity;
+  for (let i = 0; i < archive.nStorms; i++) {
+    const s = archive.storms.num("season", i);
+    if (s !== null && s > newest) newest = s;
+    const id = archive.storms.str("atcf_id", i);
+    if (id && String(id).toUpperCase() === want) claims++;
+  }
+  if (claims > 1) return { row: null, reason: "ambiguous", id: want };
+  if (Number(m[3]) < newest) return { row: null, reason: "past", id: want };
+  return { row: null, reason: "pending", id: want };
 }
 
 export function liveStateFor(archive, row, live) {

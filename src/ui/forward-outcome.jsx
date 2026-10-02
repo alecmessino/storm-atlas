@@ -2,7 +2,7 @@
  *
  * WHAT IT IS FOR. The archive answers questions about storms that have finished. A reader
  * looking at a live system wants one more thing, and only one: given that NHC says this storm
- * will be at some intensity at some instant, what did comparable storms turn out to be at that
+ * will be at some intensity at some instant, what did the cohort's storms turn out to be at that
  * same instant? That is a historical question with a historical answer, and this surface's whole
  * job is to publish it without letting it be read as a forecast.
  *
@@ -209,7 +209,7 @@ function Plate({ aligned, head, cohortN, subjectName, genesisKt, genesisIsMedian
   return (
     <svg className="at-fo-plate" viewBox={`0 0 ${W} ${H}`} role="img"
       aria-label={`NHC official forecast intensity against the historical intensity distribution of ${
-        cohortN} comparable storms, aligned by absolute valid time`}>
+        cohortN} cohort storms, aligned by absolute valid time`}>
 
       {/* the ladder, recessive — a scale, not a series */}
       {THRESH.map(([label, kt]) => (
@@ -454,7 +454,7 @@ export function ForwardOutcome({ system, cohort, clocks, aligned, vintage, timin
       </h2>
 
       <div className="at-fo-stand">
-        {head.elapsed_h} h after genesis · {head.n} of {cohort.N} comparable storms still in the
+        {head.elapsed_h} h after genesis · {head.n} of {cohort.N} cohort storms still in the
         record
         {enough ? null : ` · under the archive's gate of ${cohort.minSample}`}
       </div>
@@ -620,12 +620,15 @@ export function ForwardOutcome({ system, cohort, clocks, aligned, vintage, timin
 
       {/* THE VINTAGE, AND THE ONE CONTROL THAT CAN CHANGE IT.
           A forecast is superseded every few hours, so a placement is a statement about ONE
-          advisory and has to name it. The control re-reads the payload; a newer advisory replaces
-          the placement and an equal-or-older one is refused rather than accepted, so a payload
-          rebuilt from a stale advisory cannot walk this surface backwards. */}
+          advisory and has to name it. The control re-reads the forecast file; a newer advisory
+          replaces the placement and an equal-or-older one is refused rather than accepted, so a
+          file rebuilt from a stale advisory cannot walk this surface backwards. */}
       <div className="at-fo-vintage" data-forward-vintage-row>
-        <span><b>NHC ADVISORY</b> {zStamp(vintage && vintage.advisory_valid_at)}</span>
-        <span><b>PAYLOAD</b> {zStamp(vintage && vintage.payload_generated_at)}</span>
+        <span><b>NHC ADVISORY</b> {vintage && vintage.advisory ? `#${vintage.advisory} · ` : ""}{zStamp(vintage && vintage.advisory_valid_at)}</span>
+        {/* WHEN THE CAPTURE FIRST SAW IT, where the capture says; the file's own stamp otherwise. */}
+        {vintage && vintage.first_seen
+          ? <span><b>FIRST SEEN</b> {zStamp(vintage.first_seen)}</span>
+          : <span><b>READ</b> {zStamp(vintage && vintage.payload_generated_at)}</span>}
         <span><b>COHORT</b> N {cohort.N} · {deg1(cohort.lat)}°N {deg1(cohort.lon)}°W ·{" "}
           {cohort.radiusKm} km · genesis-conditioned</span>
         {cohort.pack ? <span><b>PACK</b> {cohort.pack}</span> : null}

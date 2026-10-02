@@ -126,11 +126,19 @@ export function delta(cell, baseCell) {
   if (!a || !b) { out.why = "one side publishes no interval"; return out; }
   out.overlap = a[0] <= b[1] && b[0] <= a[1];
   out.verdict = out.overlap ? NOT_SEPARATED : SEPARATED;
-  out.statement = out.overlap
-    ? `${Math.abs(out.deltaPp).toFixed(1)} points ${out.direction}, but the intervals overlap — `
-      + "these samples do not separate the two rates"
-    : `${Math.abs(out.deltaPp).toFixed(1)} points ${out.direction}, and the intervals do not `
-      + "overlap — these samples separate the two rates";
+  /* IDENTICAL RATES ARE SAID TO BE IDENTICAL. The magnitude-and-direction template printed
+     "0.0 points identical, but the intervals overlap — these samples do not separate the two
+     rates" over two equal rates: a direction word used as an adverb, and an interval reading
+     offered for a difference that does not exist, as if there were something the samples might
+     have separated. Equal rates always overlap, so the verdict is unchanged; only the sentence
+     stops pretending there is a gap to read. */
+  out.statement = out.direction === "identical"
+    ? "the two rates are identical — there is no difference for the intervals to separate"
+    : out.overlap
+      ? `${Math.abs(out.deltaPp).toFixed(1)} points ${out.direction}, but the intervals overlap — `
+        + "these samples do not separate the two rates"
+      : `${Math.abs(out.deltaPp).toFixed(1)} points ${out.direction}, and the intervals do not `
+        + "overlap — these samples separate the two rates";
   return out;
 }
 

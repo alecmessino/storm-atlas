@@ -46,11 +46,12 @@ export const EMPHASIS_INK = "#cfe6fa";
 export const UNKNOWN_INK = "#6a7c92";
 
 export const SELECTION_INK = "#ffffff";
-export const LANDFALL_INK = "#f46966";
+/* Outside the category ramp by ΔE2000 ≥ 19 from every class ink: the landfall mark must never
+   read as a class, and #f46966 sat 4.9 from Category 4. A soft pink rather than a saturated
+   magenta, because three thousand crosses on one coastline are a texture before they are marks. */
+export const LANDFALL_INK = "#f08fd8";
 export const GENESIS_INK = "#65cdfa";
 export const GENESIS_LIFTED_INK = "#9fdfff";
-/** Hollow, stroke only -- see replay-layer.js. */
-export const REPLAY_HEAD_INK = "rgba(224,238,250,.92)";
 
 /**
  * Category index for a wind in knots, or -1 when no wind was recorded.

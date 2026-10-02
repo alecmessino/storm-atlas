@@ -52,6 +52,7 @@ jobs:
           node scripts/check-atlas-dom.mjs --require-browser
           node scripts/check-atlas-live-dom.mjs --require-browser
           node scripts/check-atlas-forward-dom.mjs --self-test --require-browser
+          node scripts/check-atlas-live-forecast-dom.mjs --require-browser
           node scripts/check-atlas-states.mjs --require-browser
           node scripts/check-atlas-a11y.mjs --require-browser
           node scripts/check-atlas-instrument.mjs --require-browser

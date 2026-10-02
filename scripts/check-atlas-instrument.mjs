@@ -131,17 +131,27 @@ for (const [w, h] of WIDTHS) {
          walk therefore descends through elements that PRINT NOTHING and stops at the first one
          that does, which is the rule this assertion always meant: a wrapper is not chrome, and
          an identity strip would still fail here because it has text. */
+      /* THE SECOND SHELL NAMES ITS CHROME: one top bar -- the instrument's name, the systems on
+         the water now, and the three records a reader can open -- and a skip link that is
+         invisible until focused. Everything else above the question is chrome that came back, so
+         the walk is: nothing but those two before <main>, and the question's head the first
+         thing in it that prints anything. */
       firstText: (() => {
-        let el = document.querySelector(".atlas-instrument");
+        const shell = document.querySelector(".atlas-v2");
+        const main = document.querySelector("main#atlas-main");
+        if (!shell || !main) return null;
+        const before = [];
+        for (const c of shell.children) {
+          if (c === main) break;
+          if ((c.textContent || "").trim()) before.push(c.className.split(" ")[0]);
+        }
+        const extra = before.filter((c) => c !== "v2-skip" && c !== "v2-top");
+        if (extra.length) return extra[0];
+        let el = main;
         let first = null;
-        /* ONE NAMED WRAPPER IS TRANSPARENT, AND NAMING IT IS THE POINT. `.atlas-above` is the box
-           the head and the first band share so that the plate and the answer end on one
-           baseline; it prints nothing. Any other element that reaches the top of the surface --
-           an identity strip, a banner, a toolbar -- still fails this, because it would have to be
-           added to this list first, which is a decision with a name on it. */
         for (let i = 0; i < 4 && el; i++) {
           first = [...el.children].find((c) => (c.textContent || "").trim());
-          if (!first || !first.classList.contains("atlas-above")) break;
+          if (!first || !first.classList.contains("v2-q")) break;
           el = first;
         }
         return first ? first.className.split(" ")[0] : null;
@@ -152,9 +162,10 @@ for (const [w, h] of WIDTHS) {
   const at = `${w}x${h}`;
   ok(`${at.padEnd(9)} the head renders a question and a cohort line`, !!d);
   if (!d) continue;
-  const wantQ = w <= 480 ? 24 : 30;
-  /* PLEX SANS, NOT SERIF. 5c set the question in Source Serif 4; the product skin (Handoff B)
-     sets it in IBM Plex Sans at the same 30px step. The size is 5c's and the family is B's. */
+  const wantQ = w <= 760 ? 22 : 25;
+  /* PLEX SANS, AT 25px WHERE IT WAS 30. At 30px the question took three lines at 1440 and paid
+     for them in plate height; at 25px it is two, and still more than twice the cohort line under
+     it -- the property this block exists to hold. 22px once the shell stacks. */
   ok(`${at.padEnd(9)} the question is ${wantQ}px Plex Sans`,
      d.question === wantQ && /IBM Plex Sans/.test(d.family), `${d.question}px ${d.family}`);
   ok(`${at.padEnd(9)} and dominates the line beneath it`, d.question >= 2 * d.cohort,
@@ -162,7 +173,7 @@ for (const [w, h] of WIDTHS) {
   ok(`${at.padEnd(9)} which sits below it`, d.below);
   ok(`${at.padEnd(9)} the cohort count is stated exactly once in the head`, d.repeats === 1,
      `${d.repeats} renderings`);
-  ok(`${at.padEnd(9)} the question is the first thing on the surface`, d.firstText === "at-head",
+  ok(`${at.padEnd(9)} the question is the first thing under the top bar`, d.firstText === "at-head",
      `the surface opens with .${d.firstText}`);
   /* BOTH UNSET SIDES ARE PRESSABLE IN THE SENTENCE, which is the move that retired the strip. */
   ok(`${at.padEnd(9)} both sides are pressable clauses in the sentence`, d.clauses >= 2,
@@ -203,7 +214,7 @@ for (const [w, h] of WIDTHS) {
          subtree, so a caption left inside it would be near-white on near-white paper. */
       captionInk: lum(getComputedStyle(foot).color),
       plateGround: lum(getComputedStyle(plate).backgroundColor),
-      shellGround: lum(getComputedStyle(document.querySelector(".atlas-instrument")).backgroundColor),
+      shellGround: lum(getComputedStyle(document.querySelector(".atlas-v2")).backgroundColor),
       stageHoldsOnlyPlate: [...stage.children].every((c) => c.classList.contains("at-plate")),
       caption: (document.querySelector("[data-plate-caption]") || {}).textContent || "",
       /* WHERE THE CAPTION'S OLD PARAGRAPH WENT. Read as its own string so the rule below can
@@ -326,7 +337,9 @@ for (const [w, h] of WIDTHS) {
   } else if (d.noteCut) {
     console.log(`  note  ${at.padEnd(9)} the stroke note gives way to the swatches at this width`);
   }
-  ok(`${at.padEnd(9)} and it is subordinate — the frame's smallest step`, d.size === 9.5,
+  /* 10.5px IS THE SMALLEST STEP OF THE SECOND SHELL; nine-and-a-half was the first's, and it
+     was below what a reader can act on. The key is still set at the smallest step. */
+  ok(`${at.padEnd(9)} and it is subordinate — the frame's smallest step`, d.size === 10.5,
      `${d.size}px`);
 }
 
@@ -428,61 +441,57 @@ for (const [w, h] of WIDTHS) {
  * scroller at all -- a pin cannot be missing from a construction that has nowhere to pin -- and
  * that the reader reaches the heads, the rows and the limits in that order by scrolling the page
  * they are already scrolling. */
-console.log("\n[instrument] the matrix is in the page, in order, behind no scroller of its own");
+console.log("\n[instrument] the ledger is beside the plate, and the record is in the page below it");
 for (const [w, h] of WIDTHS) {
   await open("", w, h);
   const d = await page.evaluate(() => {
     const region = document.querySelector("[data-evidence-row]");
     const limits = document.querySelector("[data-deck-limits]");
-    const head = document.querySelector(".at-deck-head .at-dc-outcome");
-    if (!region || !limits || !head) return null;
+    const key = document.querySelector("[data-ledger] .lg-key");
+    const plate = document.querySelector(".at-plate");
+    if (!region || !limits || !key || !plate) return null;
     const vis = (el) => { const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; };
-    const before = { head: vis(head), limits: vis(limits) };
-    /* EVERY ELEMENT BETWEEN THE DECK AND THE DOCUMENT, and whether any of them scrolls. One
-       that does is the ledger column returning under another name. */
+    /* THE ONE NAMED SCROLLER. The inspector's tab body scrolls inside the band so the plate never
+       moves when the ledger is read to its last landfall row -- that is the second shell's
+       design, stated here by name. Anything ELSE that scrolls between the record and the
+       document is a column returning under another name. */
     const nested = [];
     for (let e = region; e && e !== document.body; e = e.parentElement) {
       const cs = getComputedStyle(e);
       if (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 4) {
-        nested.push(`${(e.className || e.tagName).toString().split(" ")[0]} `
-          + `${e.scrollHeight}/${e.clientHeight}`);
+        nested.push(`${(e.className || e.tagName).toString().split(" ")[0]} ${e.scrollHeight}/${e.clientHeight}`);
       }
     }
-    scrollTo(0, document.documentElement.scrollHeight);
+    const before = { key: vis(key) };
+    limits.scrollIntoView({ block: "center" });
     return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
       res({
         before, nested,
-        order: head.getBoundingClientRect().top + scrollY
-          < limits.getBoundingClientRect().top + scrollY,
-        after: { head: vis(head), limits: vis(limits) },
+        order: key.getBoundingClientRect().top + scrollY < limits.getBoundingClientRect().top + scrollY,
+        after: { limits: vis(limits) },
         scrolled: scrollY > 0,
-        heads: [...document.querySelectorAll(".at-deck-head .at-dc")].map((e) => e.textContent.trim()),
+        heads: (key.textContent || "").replace(/\s+/g, " ").trim(),
+        stacked: key.getBoundingClientRect().top > plate.getBoundingClientRect().bottom,
       });
     })));
   });
   const at = `${w}x${h}`;
-  ok(`${at.padEnd(9)} the matrix renders its heads and its limits`, !!d);
+  ok(`${at.padEnd(9)} the ledger and the record both render`, !!d);
   if (!d) continue;
-  /* THE LOCKED RESEARCH-TABLE HIERARCHY, IN ORDER. The two conditional columns may follow it;
-     what may not happen is the first four being reordered or renamed. */
-  ok(`${at.padEnd(9)} the columns are OUTCOME | n / N | RATE | 95% WILSON`,
-     JSON.stringify(d.heads.slice(0, 4)) === JSON.stringify(["OUTCOME", "n / N", "RATE", "95% WILSON"]),
-     d.heads.join(" | "));
-  /* "BOTH ENDS BEFORE ANY SCROLL" IS A CLAIM ABOUT THE LEDGER'S OWN SCROLLER, and below 900
-     there isn't one: the instrument stacks, the PAGE becomes the scroll, and the ledger opens
-     below a 392px figure and both its captions -- so its head starting under the fold is the
-     stacked reading order working, not a pin that failed. What must hold there is the same
-     thing in the place it means something, and that is the assertion below: once the reader has
-     scrolled to the ledger, the heads and the limits are both on screen. */
-  ok(`${at.padEnd(9)} no element between the matrix and the document scrolls`,
+  /* THE LOCKED RESEARCH-TABLE HIERARCHY, IN THE LEDGER'S KEY: the outcome, then the rate with
+     its count and its Wilson interval. */
+  const i = ["OUTCOME", "RATE", "n / N", "95% WILSON"].map((k) => d.heads.indexOf(k));
+  ok(`${at.padEnd(9)} the key reads OUTCOME · RATE · n / N · 95% WILSON`,
+     i.every((v) => v >= 0) && i.every((v, j) => j === 0 || v > i[j - 1]), d.heads);
+  if (!d.stacked) {
+    ok(`${at.padEnd(9)} beside the plate, the ledger's key is on the first screen`, d.before.key);
+  }
+  ok(`${at.padEnd(9)} no element between the record and the document scrolls`,
      d.nested.length === 0, d.nested.join(" | "));
-  ok(`${at.padEnd(9)} and the reader meets the heads before the limits`, d.order);
+  ok(`${at.padEnd(9)} and the reader meets the ledger before the record`, d.order);
   if (d.scrolled) {
-    ok(`${at.padEnd(9)} which the page's own scroll reaches`, d.after.limits,
-       `limits ${d.after.limits}`);
-  } else {
-    console.log(`  note  ${at.padEnd(9)} the page did not need to scroll at this height`);
+    ok(`${at.padEnd(9)} which the page's own scroll reaches`, d.after.limits, `limits ${d.after.limits}`);
   }
 }
 
@@ -568,7 +577,7 @@ for (const [w, h] of WIDTHS) for (const [sname, query] of CUT_STATES) {
        five resting tracks are 468px against 350px of phone, and a refused row refused 118px to
        the right of anything a reader was looking at. */
     if (resting) {
-      const shell = document.querySelector(".atlas-instrument");
+      const shell = document.querySelector(".atlas-v2");
       if (shell && shell.scrollWidth > shell.clientWidth + 1) {
         out.push(`the instrument scrolls sideways: ${shell.scrollWidth} into ${shell.clientWidth}`);
       }
@@ -604,7 +613,7 @@ console.log("\n[instrument] identity, provenance and the citation are at the foo
     const c = document.querySelector("[data-colophon]");
     if (!c) return null;
     const r = c.getBoundingClientRect();
-    const shell = document.querySelector(".atlas-instrument");
+    const shell = document.querySelector(".atlas-v2");
     /* THE FOOT OF THE INSTRUMENT IS THE FOOT OF THE PAGE NOW. It used to be the fourth row of a
        grid pinned to the viewport, so "at the foot" and "on the first screen" were the same
        claim. Under the composition the complete matrix, the limits and the apparatus are below

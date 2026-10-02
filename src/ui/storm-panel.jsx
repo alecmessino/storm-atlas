@@ -95,7 +95,7 @@ function throughLine(view) {
 }
 
 export function StormPanel({ storm, archive, onClose, onReplay, replaying, spec, specUrl,
-  bridge, cohortSentence, result, onBridge, cursorLive, live }) {
+  bridge, cohortSentence, result, onBridge, cursorLive, live, recordFirst = false }) {
   /* THE STRIP IS THE DEFAULT AND THE RECORD IS ONE PRESS AWAY.
    *
    * WHAT THIS CHANGES AND WHAT IT DOES NOT. The locked rules ask a selected storm for a MINIMUM
@@ -113,10 +113,15 @@ export function StormPanel({ storm, archive, onClose, onReplay, replaying, spec,
    *
    * The state resets with the storm: opening one record does not commit a reader to opening the
    * next. Keyed rather than tracked, so the reset cannot be forgotten. */
-  const [openRecord, setOpenRecord] = React.useState(false);
+  /* RECORD FIRST WHERE THE STRIP ALREADY EXISTS. In the v2 inspector the strip's job is done by
+     the subject strip above the tabs, and this panel is the RECORD tab: a reader who pressed the
+     storm's own tab asked for the record, so it opens on it and offers no way back to a strip
+     that would only repeat the one above. */
+  const [openRecordState, setOpenRecord] = React.useState(false);
+  const openRecord = recordFirst || openRecordState;
   const key = storm ? storm.storm_id : null;
   const lastKey = React.useRef(key);
-  if (lastKey.current !== key) { lastKey.current = key; if (openRecord) setOpenRecord(false); }
+  if (lastKey.current !== key) { lastKey.current = key; if (openRecordState) setOpenRecord(false); }
   if (!storm) return null;
   const s = storm;
   const q = s.quality;
@@ -236,8 +241,11 @@ export function StormPanel({ storm, archive, onClose, onReplay, replaying, spec,
                 statement about where this storm is now.
               </Refusal>
             ) : null}
-            <Row k={view ? "operational peak" : "archive peak"}
-              v={<Num value={view ? view.peak_vmax_kt : s.max_vmax_kt} unit="kt" />} />
+            {/* `peak_wind_kt` is the field live.js emits; `peak_vmax_kt` never existed on the
+                operational view, so every live-governed storm read "—" here while the record
+                below it read the right number. */}
+            <Row k={view ? "operational to date" : "archive peak"}
+              v={<Num value={view ? view.peak_wind_kt : s.max_vmax_kt} unit="kt" />} />
             <Row k="minimum pressure"
               v={<Num value={view ? view.min_mslp_mb : s.min_mslp_mb} unit="mb" />} />
             <Row k="class" v={<Txt value={CAT_LABEL[headCategory] || headCategory} />} />
@@ -254,8 +262,8 @@ export function StormPanel({ storm, archive, onClose, onReplay, replaying, spec,
 
       <div className="at-insp-body" style={openRecord ? undefined : { display: "none" }}>
       <div className="at-pad">
-        {openRecord ? (
-          <button type="button" className="at-tbtn" data-close-record
+        {openRecord && !recordFirst ? (
+          <button type="button" className="at-tbtn at-wide" data-close-record
             style={{ marginBottom: 9 }} onClick={() => setOpenRecord(false)}>
             ← BACK TO THE STRIP
           </button>

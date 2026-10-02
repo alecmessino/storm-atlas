@@ -15,7 +15,8 @@
  * whose class the archive withheld. Exercising the real paths is strictly stronger than
  * exercising a fixture that resembles them.
  *
- * NOT IN CI, for the same reason check-panel-dom.mjs is not: it needs a browser binary.
+ * IN CI: checks.yml installs Chromium and runs this with --require-browser, which turns the
+ * "playwright is not installed -- SKIPPED" path into a failure. Locally:
  *   npm i --no-save playwright && npx playwright install chromium
  *   node scripts/check-atlas-dom.mjs
  */
@@ -158,7 +159,7 @@ await page.waitForTimeout(700);
 
 /* THE REGISTRY'S FAILURE SENTINELS, WATCHED ACROSS EVERY STATE THIS HARNESS VISITS.
  *
- * docs/app/claims.js answers an id it does not hold with "UNREGISTERED CLAIM (<id>)", and an id
+ * claims.js answers an id it does not hold with "UNREGISTERED CLAIM (<id>)", and an id
  * whose function throws with "CLAIM ERROR". Both are rendered exactly where the capability
  * statement would have been -- so a mistyped id does not blank the sentence, it REPLACES it,
  * and the reader sees a placeholder in the position of a claim about what the surface can do.
@@ -197,16 +198,29 @@ const closeBuilder = async () => {
   await page.click("[data-sheet-close]");
   await page.waitForTimeout(250);
 };
+/* A CLICK ON OPEN WATER ASKS NOTHING UNTIL IT IS ASKED. It opens the pick card -- the storms that
+   pass through the cell, and the button that commits a location condition -- so the gate presses
+   that button, as a reader would. A committed question frames the camera on its cohort, so a point
+   the camera has left behind is brought back with HOME first. */
 const clickLatLng = async (lat, lng) => {
   await closeBuilder();
-  const p = await page.evaluate(({ lat, lng }) => {
+  const where = () => page.evaluate(({ lat, lng }) => {
     const m = globalThis.__ATLAS_MAP;
     const c = m.latLngToContainerPoint([lat, lng]);
     const r = m.getContainer().getBoundingClientRect();
-    return { x: r.left + c.x, y: r.top + c.y };
+    const inside = c.x > 30 && c.y > 30 && c.x < r.width - 60 && c.y < r.height - 30;
+    return { x: r.left + c.x, y: r.top + c.y, inside };
   }, { lat, lng });
+  let p = await where();
+  if (!p.inside) {
+    await page.click("[data-camera-home]");
+    await page.waitForTimeout(300);
+    p = await where();
+  }
   await page.mouse.click(p.x, p.y);
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(300);
+  const ask = await page.$("[data-pick-ask]");
+  if (ask) { await ask.click(); await page.waitForTimeout(600); }
 };
 /* SELECT, THEN OPEN THE RECORD.
  *
@@ -578,7 +592,7 @@ console.log("\n[4c] the builder reads as a question, not as a schema");
     [...document.querySelectorAll("[data-chip]")].map((e) => e.getAttribute("data-chip")));
   ok("every Phase 1/2 filter survives as a first-class condition",
     ["intensity-all", "intensity-cat3", "intensity-cat5", "landfall-mexico", "landfall-any",
-     "basin-all", "season-1971+", "mode-replay", "radius-500"]
+     "basin-all", "season-1971+", "radius-500"]
       .every((k) => chips.includes(k)),
     chips.join(","));
 }
@@ -701,7 +715,9 @@ console.log("\n[4g] the refusal says WHICH population it counted, and can be act
   t = await text();
   ok("a link made under an older methodology is told so",
     await page.evaluate(() => !!document.querySelector("[data-methodology-moved]")));
-  ok("naming both versions", /methodology 1\.0\.0/.test(t) && /now publishes under 1\.1\.0/.test(t));
+  /* The current version is pinned, and moves with each methodology release (1.1.1: the rule-4
+     landfall, pre-1971 and outcome-known corrections, per the 1.1.1 errata). */
+  ok("naming both versions", /methodology 1\.0\.0/.test(t) && /now publishes under 1\.1\.1/.test(t));
   ok("and saying what actually changed for them",
     /some contracts that published a rate under 1\.0\.0 now refuse as OUT OF SCOPE/.test(t));
 
@@ -815,7 +831,7 @@ console.log("\n[4f] the calibration ledger — reachable, and it publishes its o
   ok("a reliability curve per contract",
     await page.evaluate(() =>
       [...document.querySelectorAll("[data-contract] svg")].length >= 8));
-  ok("a calibration status per contract", /CALIBRATED/.test(t));
+  ok("a calibration status per contract", /BEAT CLIMATOLOGY|CORRECTLY REFUSED/.test(t));
   ok("and the methodology and archive stamp", /methodology version/i.test(t)
     && /backtest sha256/i.test(t));
 
@@ -955,116 +971,24 @@ await page.waitForTimeout(700);
   ok("and counts the vertices it tested against", /land-union boundary edges/i.test(t));
 }
 
-console.log("\n[8] the replay reveals the record without lying about time");
+console.log("\n[8] the archive replay is gone, and the storm's own clock is the only one");
 await page.keyboard.press("Escape");
 await page.waitForTimeout(300);
 {
-  await chip("mode-replay");
-  await page.waitForTimeout(700);
-
-  /* HOME FIRST, AND THE REASON IS THE CAMERA RULE RATHER THAN THE PROBE'S CONVENIENCE.
-   *
-   * By this point the run has selected two storms, and selecting a storm fits its track -- the
-   * one automatic camera move the surface makes. Switching to replay does NOT move the camera
-   * back: a mode change is not allowed to steal a view the reader is holding, which is the whole
-   * persistence rule. So the plate is legitimately framed on one storm while the clock reveals
-   * three thousand, and the ink this section measures is off the plate.
-   *
-   * That is not a bug to work around; it is the state the recovery controls exist for. So the
-   * probe uses one -- which also asserts that HOME is on the plate, is clickable, and actually
-   * reframes. A gate that reached this state by accident and then measured nothing was reporting
-   * a camera decision as an empty canvas. */
+  /* THE ARCHIVE REPLAY WAS REMOVED ON PURPOSE (a recorded design decision): it
+     animated a population it computed nothing about, and it shared a play flag with the storm
+     transport that started the wrong clock. What this asserts is that it is gone rather than
+     half-gone -- no mode control, no second clock -- and that HOME, the recovery the replay used
+     to lean on, is still on the plate. */
+  ok("no replay mode is offered", !(await page.$('[data-chip="mode-replay"]')));
+  ok("no archive transport is mounted", !(await page.$(".at-archive-transport")));
   const homeBtn = await page.$("[data-camera-home]");
   ok("HOME is on the plate", !!homeBtn);
   if (homeBtn) { await homeBtn.click(); await page.waitForTimeout(500); }
-  const t = await text();
-  ok("the transport shows a real UTC date, not a frame index",
-    /\d{4}-\d{2}-\d{2}|\d{1,2}\s+\w{3}\s+\d{4}/.test(t), t.slice(0, 160));
-  ok("speed is stated in archive time, not as a bare multiplier", /d\/s/.test(t));
-  ok("it says how many storms are active now", /ACTIVE NOW/.test(t));
-  ok("and how much of the record has been revealed", /REVEALED/.test(t));
-  ok("the skip is declared before it happens", /skips/i.test(t));
-
-  /* Play until the clock has jumped at least once. The notice is transient by design, so this
-     watches for it rather than sampling once and hoping. */
-  const cursorOf = () => page.evaluate(() => {
-    const r = globalThis.__ATLAS_REPLAY;
-    return r ? r.cursor() : null;
-  });
-  const start = await cursorOf();
-  await page.keyboard.press(" ");
-  let sawSkip = false;
-  let backwards = false;
-  let prev = start;
-  for (let i = 0; i < 40 && !sawSkip; i++) {
-    await page.waitForTimeout(150);
-    const now = await cursorOf();
-    if (now !== null && prev !== null && now < prev) backwards = true;
-    prev = now;
-    if (/SKIPPED\s+[\d,]+\s+(DAYS?|HOURS?)\s+·\s+NO STORM ACTIVE/i.test(await text())) sawSkip = true;
-  }
-  await page.keyboard.press(" ");
-  await page.waitForTimeout(200);
-  const end = await cursorOf();
-  ok("the cursor advanced", end !== null && start !== null && end > start, `${start} -> ${end}`);
-  ok("and never ran backwards across a skip", !backwards);
-  ok("a jump is announced on screen when it happens", sawSkip,
-    "no SKIPPED … NO STORM ACTIVE notice appeared in six seconds of play");
-  ok("storms have been revealed", /REVEALED[\s\S]{0,40}[1-9]/.test(await text()));
-}
-
-console.log("\n[8b] accumulated ink survives a pan, a zoom and a resize");
-{
-  /* THE FAILURE THIS EXISTS FOR. Assigning canvas.width or canvas.height throws the backing
-     store away -- specified behaviour, and it fires on every moveend, zoomend and resize. An
-     accumulating layer that merely skipped its clearRect would therefore lose the whole run on
-     the first drag, and no text probe could see it: the DOM is identical either way. So this
-     counts actual painted pixels.
-
-     EVERY PIXEL, NOT EVERY THIRTY-SEVENTH. This used to sample the alpha channel with a stride,
-     which is cheaper and was fine while the check happened to run with a lot of ink on screen.
-     It is not fine here: the loop above stops as soon as the first skip notice appears, which
-     is often two storms into 1851, and two short tracks at the minimum zoom paint a couple of
-     hundred pixels on a canvas of two and a half million. At that density a stride of 37 turns
-     the measurement into a Poisson draw with a mean near six -- and a run that preserved every
-     pixel of its history could report 9 before and 2 after purely by where the samples landed.
-     A gate whose verdict is noise is not a gate. Counting the whole alpha channel costs a few
-     milliseconds, asserts exactly the same property, and gives the same answer every time. */
-  const inkOf = () => page.evaluate(() => {
-    const l = globalThis.__ATLAS_REPLAY;
-    if (!l || !l._canvas) return -1;
-    const c = l._canvas;
-    const g = c.getContext("2d");
-    const d = g.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++;
-    return n;
-  });
-  const before = await inkOf();
-  ok("the replay canvas has ink on it", before > 0, `${before} painted pixels`);
-
-  await page.evaluate(() => globalThis.__ATLAS_MAP.panBy([140, 90], { animate: false }));
-  await page.waitForTimeout(900);
-  const afterPan = await inkOf();
-  ok("it survives a pan", afterPan > before * 0.4, `${before} -> ${afterPan}`);
-
-  await page.evaluate(() => globalThis.__ATLAS_MAP.setZoom(globalThis.__ATLAS_MAP.getZoom() - 1,
-    { animate: false }));
-  await page.waitForTimeout(900);
-  const afterZoom = await inkOf();
-  ok("it survives a zoom", afterZoom > before * 0.4, `${before} -> ${afterZoom}`);
-
-  await page.setViewportSize({ width: 1600, height: 950 });
-  await page.waitForTimeout(900);
-  const afterResize = await inkOf();
-  ok("it survives a resize", afterResize > before * 0.3, `${before} -> ${afterResize}`);
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.waitForTimeout(500);
 }
 
 console.log("\n[8c] the density surfaces say what they count");
 {
-  await chip("mode-explore");
   await page.waitForTimeout(400);
   /* AND THE EDITOR IS CLOSED FIRST. It opens as a popover anchored to the clause it edits, which
      may overlap the plate -- that is the composition, not a defect -- so a reader reaching for
@@ -1307,35 +1231,6 @@ console.log("\n[8d] the bridge — one storm, and the population it belongs to")
       (/[^\n]*archive-wide[^\n]*/.exec(t) || ["(no line)"])[0]);
     ok("so the zero is never left readable as an empirical never",
       /outside the population this query draws from/.test(t));
-  }
-
-  /* THE OTHER TRANSPORT, AND THE ONLY REGRESSION A MUTATION SWEEP OF THIS SECTION GOT PAST.
-     `playing` and `cursorMs` belong to the STORM transport. In replay mode the ARCHIVE clock
-     holds the position and both stay null -- and the guard's only existing check clicks
-     [data-storm-replay], which sets `playing`, a term the broken expression still contains. So
-     the guard kept rendering under the regression and every gate stayed green. The two halves
-     of the blind spot were tested in sections that never met: [8d] never enters replay mode,
-     and [8] enters it but never selects a storm, so the panel never renders there.
-     The arrangement below is the one a reader actually reaches: park the archive clock, then
-     click the storm under the cursor. */
-  {
-    await open("v=1&mo=8.9");
-    await chip("mode-replay");
-    await page.waitForTimeout(700);
-    await page.keyboard.press(" ");
-    await page.waitForTimeout(1500);
-    await page.keyboard.press(" ");
-    await page.waitForTimeout(400);
-    const parked = await page.evaluate(() => {
-      const r = globalThis.__ATLAS_REPLAY;
-      return r && r.cursor ? r.cursor() : null;
-    });
-    await selectRow(g.row);
-    await page.waitForTimeout(900);
-    ok("the archive clock is holding a position", parked !== null, String(parked));
-    ok("and the storm panel is open over it", /GENESIS POINT USED FOR MATCHING/.test(await text()));
-    ok("so the ARCHIVE transport raises the replay guard too, not just the storm transport",
-      await has("[data-bridge-replay-guard]"), page.url());
   }
 
   /* THE LEAD SENTENCE FOLLOWS THE VERDICT. It asserted membership before membership had been

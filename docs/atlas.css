@@ -792,9 +792,9 @@
 
 [data-atlas] .at-legend{
   position:absolute;right:12px;bottom:calc(var(--at-plate-gutter) + 22px);
-  max-width:376px;z-index:450;pointer-events:none;
-  display:flex;flex-direction:column;gap:6px;
-  background:rgba(15,21,31,.94);padding:8px 10px;
+  max-width:320px;z-index:450;pointer-events:none;
+  display:flex;flex-direction:column;gap:5px;
+  background:rgba(15,21,31,.86);padding:5px 8px;
 }
 [data-atlas] .at-legend .at-lrow{
   display:flex;gap:8px;align-items:center;font-family:var(--font-mono);font-size:9.5px;
@@ -803,6 +803,11 @@
 [data-atlas] .at-legend .at-lrow .at-d{color:var(--t3);letter-spacing:0;text-transform:none}
 [data-atlas] .at-legend .at-sw{display:flex;flex:none}
 [data-atlas] .at-legend .at-sw i{width:9px;height:9px;display:block}
+[data-atlas] .at-legend .at-lrow-live{padding:0;border-top:0;white-space:nowrap;color:var(--t1)}
+[data-atlas] .pk-live{display:flex;flex-direction:column;gap:3px;margin:8px 0 2px;padding:7px 8px;border:1px solid var(--rule-3);border-left:3px solid var(--t1);font-size:11.5px;color:var(--t2)}
+[data-atlas] .pk-live b{color:var(--t1);font-weight:600}
+[data-atlas] .pk-live-h{font-family:var(--at-mono);font-size:9.5px;letter-spacing:1.1px;color:var(--t1)}
+[data-atlas] .pk-live em{font-style:normal;font-size:10.5px;color:var(--t3)}
 /* At the HEAD of the plate, not the foot. The foot is where the graticule prints its longitude
    labels, where Leaflet prints the attribution and where the density legend sits, and this
    ribbon was landing on all three: measured at 1920, its box overlapped the attribution's and
@@ -2088,6 +2093,8 @@
 }
 /* PAINTED RATHER THAN WRITTEN, so the mark is not part of the question's own text. */
 [data-atlas] .at-clause-x::after{content:"\00d7"}
+[data-atlas] .at-clause-pair{white-space:nowrap}
+[data-atlas] .at-clause-pair > .at-clause{white-space:normal}
 [data-atlas] .at-clause-x:hover{color:var(--neg)}
 
 /* ─── the cohort line ─────────────────────────────────────────────────────────────────────
@@ -3799,3 +3806,678 @@
 }
 [data-atlas] .at-fo-scroll::-webkit-scrollbar{height:8px;background:var(--sunken)}
 [data-atlas] .at-fo-scroll::-webkit-scrollbar-thumb{background:var(--rule-3)}
+
+/* ─── the bridge and methodology notices ─────────────────────────────────────────────── */
+[data-atlas] .at-notice{
+  margin:var(--sp-4,12px) var(--at-gutter,24px) 0;border:1px solid var(--rule-2);
+  padding:10px 14px;
+}
+[data-atlas] .at-notice-hd{
+  font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.6px;
+}
+[data-atlas] .at-notice-bd{
+  font-family:var(--font-sans);font-size:13px;line-height:1.5;color:var(--t2);margin-top:3px;max-width:110ch;
+}
+
+/* ═══ THE INSTRUMENT, VERSION TWO ══════════════════════════════════════════════════════════
+ *
+ * FOUR BANDS: the top bar, the question, the work (plate + inspector) and the record below the
+ * fold. The work band is sized from the viewport so the plate and the inspector always end on
+ * the same line, and the record's heading peeks under it so what is below is advertised. Every
+ * rule here is scoped to `.atlas-v2`; the retired instrument shell's rules are scoped to
+ * `.atlas-instrument` and no longer match anything.
+ *
+ * THE TYPE STEPS ARE LARGER THAN THE LAST SHELL'S. Nine-pixel mono was the default label size;
+ * the smallest step here is 10.5px, and anything a reader must read to act on is 11px or more.
+ */
+[data-atlas].atlas-shell.atlas-v2{
+  position:relative;inset:auto;overflow:visible;
+  --top-h:46px;
+  --insp-w:clamp(400px,31vw,560px);
+  --at-pad:var(--g);
+  display:block;min-height:100vh;
+}
+[data-atlas].atlas-v2{--g:24px}
+[data-atlas].atlas-v2 > *{min-width:0}
+[data-atlas] .v2-skip{
+  position:absolute;left:-9999px;top:6px;z-index:5000;padding:8px 12px;
+  background:var(--chrome-raised);color:var(--t1);border:1px solid var(--accent);
+  font-family:var(--at-mono);font-size:12px;
+}
+[data-atlas] .v2-skip:focus{left:12px}
+
+/* ── the top bar ──────────────────────────────────────────────────────────────────────── */
+[data-atlas] .v2-top{
+  position:relative;z-index:1100;
+  display:flex;align-items:center;gap:18px;min-width:0;
+  height:var(--top-h);padding:0 var(--g);
+  background:var(--chrome-hi);border-bottom:1px solid var(--rule-2);
+}
+[data-atlas] .v2-brand{display:flex;align-items:baseline;gap:14px;min-width:0;flex:0 1 auto}
+[data-atlas] .v2-back{
+  font-family:var(--at-mono);font-size:11px;letter-spacing:.8px;color:var(--t3);text-decoration:none;flex:none;
+}
+[data-atlas] .v2-back:hover{color:var(--accent)}
+[data-atlas] .v2-word{
+  font-family:var(--at-sans);font-size:14px;font-weight:700;letter-spacing:3.2px;color:var(--t1);flex:none;
+}
+[data-atlas] .v2-scope{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:.8px;color:var(--t3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+}
+[data-atlas] .v2-tools{display:flex;align-items:center;gap:18px;flex:none;margin-left:auto}
+[data-atlas] .v2-tool{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.3px;text-transform:uppercase;
+  color:var(--t2);background:none;border:0;border-bottom:1px solid var(--rule-3);
+  padding:0 0 2px;cursor:pointer;
+}
+[data-atlas] .v2-tool:hover{color:var(--t1);border-bottom-color:var(--accent)}
+
+/* the live strip */
+[data-atlas] .lv{position:relative;display:flex;align-items:center;gap:6px;min-width:0;margin-left:auto}
+[data-atlas] .lv + .v2-tools{margin-left:18px}
+/* THE LIVE CHIPS GIVE WAY BEFORE THE NAV DOES. Three active systems at 1440 ran the last chip
+   under READINGS; the chips' metadata goes first (below 1600) and a chip can then shrink to its
+   name, never past the tools. */
+[data-atlas] .lv > .lv-sys{min-width:0;flex:0 1 auto;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media (max-width:1599px){
+  [data-atlas] .lv-meta{display:none}
+  /* The region is the top bar's to name; the plate head keeps its number and its controls on one
+     line, so the map starts one line higher. */
+  [data-atlas].atlas-v2 .at-plate-region{display:none}
+}
+[data-atlas] .lv-k{
+  display:flex;align-items:center;gap:6px;flex:none;
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.4px;color:var(--pos);
+}
+[data-atlas] .lv-dot{width:7px;height:7px;border-radius:50%;background:var(--pos);display:block}
+[data-atlas] .lv-dot-stale{background:transparent;border:1px solid var(--warn)}
+[data-atlas] .lv-sys{
+  display:flex;align-items:baseline;gap:7px;flex:none;cursor:pointer;
+  padding:4px 9px;background:transparent;color:var(--t1);
+  border:1px solid var(--rule-3);
+}
+[data-atlas] .lv-sys:hover,[data-atlas] .lv-sys[aria-expanded="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+[data-atlas] .lv-sys b{font-family:var(--at-sans);font-size:12.5px;font-weight:600;letter-spacing:.3px}
+[data-atlas] .lv-meta{font-family:var(--at-mono);font-size:10.5px;color:var(--t3);letter-spacing:.5px}
+[data-atlas] .lv-on{font-family:var(--at-mono);font-size:9.5px;letter-spacing:1.2px;color:var(--accent)}
+[data-atlas] .lv-pop{
+  position:absolute;top:calc(100% + 9px);right:0;width:min(400px,92vw);max-height:70vh;overflow:auto;
+  z-index:1200;padding:12px 14px 14px;background:var(--chrome-raised);
+  border:1px solid var(--rule-3);box-shadow:0 18px 44px rgba(0,0,0,.55);
+}
+/* THE FEED'S AGE, WHERE "LIVE" WAS. Past the artifact's own freshness bound the word LIVE is
+   withdrawn and the age takes its place, in the warning ink, so a feed nobody has rewritten can
+   never sit under a green dot. */
+[data-atlas] .lv-k-stale{color:var(--warn)}
+/* THE WATCH'S MARK ON A CHIP. Only ELEVATED and above get one; QUIET is the absence of a mark.
+   Each state carries its own word, so nothing here is read from colour alone. */
+[data-atlas] .lv-w{
+  font-family:var(--at-mono);font-size:9.5px;letter-spacing:1px;padding:1px 5px;
+  border:1px solid currentColor;line-height:1.3;flex:none;
+}
+[data-atlas] .lv-w-elev{color:var(--t2)}
+[data-atlas] .lv-w-dis{color:var(--warn)}
+[data-atlas] .lv-w-case{color:var(--neg)}
+/* FORECAST NOW and the watch, inside the live card. */
+[data-atlas] .at-live-fc{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule)}
+[data-atlas] .at-live-fc-h{
+  display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;
+  font-family:var(--at-mono);font-size:9.5px;letter-spacing:1.3px;color:var(--t1);margin-bottom:2px;
+}
+[data-atlas] .at-live-fc-h em{font-style:normal;color:var(--t3);font-size:9px;letter-spacing:.8px}
+[data-atlas] .at-live-fc-wh{margin-top:10px}
+[data-atlas] .at-live-w{margin-top:6px;padding:6px 8px;border:1px solid var(--rule-3);border-left-width:3px}
+[data-atlas] .at-live-w.lv-w-elev{border-left-color:var(--accent);color:inherit}
+[data-atlas] .at-live-w.lv-w-dis{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 7%,transparent);color:inherit}
+[data-atlas] .at-live-w.lv-w-case{border-left-color:var(--neg);background:color-mix(in srgb,var(--neg) 7%,transparent);color:inherit}
+[data-atlas] .at-live-w-ref{border-left-color:var(--t3)}
+[data-atlas] .at-live-w-k{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-family:var(--at-mono);font-size:10px;letter-spacing:.6px;color:var(--t1)}
+[data-atlas] .at-live-w-k b{letter-spacing:1.1px}
+[data-atlas] .lv-w-dis .at-live-w-k b{color:var(--warn)}
+[data-atlas] .lv-w-case .at-live-w-k b{color:var(--neg)}
+[data-atlas] .at-live-w-k em{font-style:normal;color:var(--t3);font-size:9px}
+[data-atlas] .at-live-w p{margin:4px 0 0;font-size:11.5px;line-height:1.4;color:var(--t2)}
+[data-atlas] .at-live-w code{display:block;margin-top:4px;font-family:var(--at-mono);font-size:9.5px;color:var(--t3)}
+[data-atlas] .at-live-w-q{margin-top:6px;font-family:var(--at-mono);font-size:10px;letter-spacing:.5px;color:var(--t2)}
+[data-atlas] .at-live-w-q b{color:var(--t1);letter-spacing:1.1px;margin-right:4px}
+[data-atlas] .at-live-w-foot{margin:6px 0 0;font-size:10.5px;color:var(--t3);line-height:1.4}
+[data-atlas] .at-live-jump{
+  background:none;border:0;padding:0;cursor:pointer;color:var(--accent-bright);
+  font-family:var(--at-mono);font-size:9.5px;letter-spacing:1px;text-decoration:underline;
+}
+
+/* ── the question ──────────────────────────────────────────────────────────────────────── */
+[data-atlas] .v2-main{
+  display:flex;flex-direction:column;min-width:0;
+}
+[data-atlas] .v2-q{flex:none;padding:16px var(--g) 12px;min-width:0}
+[data-atlas].atlas-v2 .at-head{padding:0}
+[data-atlas].atlas-v2 .at-question-text{
+  font-size:25px;line-height:1.28;max-width:80ch;margin:0;font-weight:400;letter-spacing:-.2px;
+}
+[data-atlas].atlas-v2 .at-cohort{margin-top:9px;font-size:11.5px}
+[data-atlas].atlas-v2 .at-notice{margin:0 0 12px}
+[data-atlas] .at-addc{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+[data-atlas] .at-addc-k{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.4px;color:var(--t3);margin-right:2px;
+}
+[data-atlas] .at-addc-b{
+  font-family:var(--at-mono);font-size:11px;letter-spacing:.4px;color:var(--t2);cursor:pointer;
+  background:transparent;border:1px dashed var(--rule-3);padding:3px 9px;
+}
+[data-atlas] .at-addc-b:hover{color:var(--t1);border-style:solid;border-color:var(--accent)}
+[data-atlas] .at-addc-outcome{border-color:color-mix(in srgb,var(--flag) 55%,var(--rule-3))}
+[data-atlas] .at-addc-outcome:hover{border-color:var(--flag)}
+
+/* ── the work band ─────────────────────────────────────────────────────────────────────── */
+[data-atlas] .v2-work{
+  /* THE BAND'S HEIGHT DOES NOT DEPEND ON THE QUESTION ABOVE IT. A longer question pushes the band
+     down the page; it never shrinks the plate, because a plate that changes size with the words
+     changes the aperture HOME returns to.
+     AND IT IS CAPPED BY THE PLATE'S OWN WIDTH. The aperture fills the plate with the research
+     geography's longitude; its latitude, 0-65N, projects to about 0.69 of that width -- and the
+     zoom is floored to a quarter step, which takes that to about 0.55 of the plate's width in the
+     worst case (measured at 1280). A plate taller than that makes the clamp raise the zoom and
+     crop the East Pacific off a plate captioned for it -- so the band stops at 0.55 of the
+     plate's width plus its head and figure lines (114px), and the page carries on below. */
+  --plate-w:calc(100vw - 2 * var(--g) - var(--insp-w) - 22px);
+  height:max(480px,min(calc(100vh - var(--top-h) - 150px),calc(var(--plate-w) * .55 + 114px)));
+  flex:none;display:grid;grid-template-columns:minmax(0,1fr) var(--insp-w);
+  grid-template-rows:minmax(0,1fr);
+  gap:0 22px;padding:0 var(--g) 12px;min-height:0;min-width:0;
+}
+/* WIDER PLATES TAKE A LITTLE MORE HEIGHT, AND THE INSPECTOR NEEDS IT. At 0.55 the 1440x900
+   inspector clipped the Category 5 rate inside its own scroller -- the ladder that must be
+   whole at first paint. Measured across 1280-1920: 0.60 keeps every development region on the
+   opening plate from 1400px up (0.62 loses the MDR and the East Pacific at 1440 and 1680), and
+   below 1400 the 0.55 bound stays, because at 1280 0.60 loses the East Pacific. */
+@media (min-width:1400px){
+  [data-atlas] .v2-work{height:max(480px,min(calc(100vh - var(--top-h) - 150px),calc(var(--plate-w) * .6 + 114px)))}
+}
+[data-atlas] .v2-plate{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+[data-atlas].atlas-v2 .at-platehead{min-height:30px;padding:0 0 8px;gap:4px 14px;flex-wrap:wrap;overflow:visible;white-space:normal}
+[data-atlas].atlas-v2 .at-platehead .at-plate-title{display:inline;color:var(--t1)}
+[data-atlas].atlas-v2 .at-platehead .at-r{display:inline;margin-left:auto}
+[data-atlas].atlas-v2 .at-plate-modebtn{font-size:10.5px;padding:3px 7px}
+[data-atlas].atlas-v2 .at-layers{margin-left:auto;padding-left:10px}
+[data-atlas].atlas-v2 .at-layer-btn::before{content:"\25A1\00a0";color:var(--t3)}
+[data-atlas].atlas-v2 .at-layer-btn[aria-pressed="true"]::before{content:"\25A0\00a0";color:var(--accent)}
+[data-atlas].atlas-v2 .at-layer-btn[aria-pressed="true"]{border-bottom-color:transparent}
+[data-atlas].atlas-v2 .atlas-stage{
+  display:block;flex:1 1 auto;min-height:340px;position:relative;overflow:hidden;
+  container:plate / inline-size;
+}
+[data-atlas].atlas-v2 .at-plate{position:absolute;inset:0}
+[data-atlas].atlas-v2 .at-plate-chrome{flex:none}
+[data-atlas].atlas-v2 .at-platefoot{padding:8px 0 0;font-size:10.5px}
+[data-atlas].atlas-v2 .at-plate-lens{display:inline;color:var(--t1)}
+[data-atlas].atlas-v2 .at-plate-cellread{display:inline}
+[data-atlas].atlas-v2 .at-plate-figure{padding-top:6px}
+/* ONE LINE, ALWAYS. The caption's length follows the question, and a caption that grew a line
+   took that line off the plate -- so HOME returned to a different aperture than the page opened
+   on. Its height is fixed at one line; a longer caption ends in an ellipsis and its full text is
+   its title. (Stacked, the stage has a height of its own and the caption may take two.) */
+[data-atlas].atlas-v2 .at-plate-figure .at-plate-hint{display:none}
+[data-atlas].atlas-v2 .at-plate-caption{font-size:12px;line-height:18px;height:18px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[data-atlas] .v2-transport{flex:none;margin-top:8px}
+[data-atlas] .v2-transport .at-transport{border:1px solid var(--rule-2)}
+
+/* ── the inspector ─────────────────────────────────────────────────────────────────────── */
+[data-atlas] .v2-insp{
+  display:flex;flex-direction:column;min-width:0;min-height:0;
+  border-left:1px solid var(--rule-2);padding-left:20px;
+}
+/* THE INSPECTOR'S THREE PLACES, AS ONE CONTROL. Equal thirds, a filled active tab, a rule the
+   active tab sits on -- read as "outcomes, storms, record", not as three small links. */
+[data-atlas] .v2-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;flex:none;border-bottom:1px solid var(--rule-3)}
+[data-atlas] .v2-tabs [role="tab"]{
+  font-family:var(--at-mono);font-size:11.5px;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--t2);background:none;border:0;padding:10px 10px 9px;cursor:pointer;text-align:center;
+  box-shadow:inset 0 -2px 0 transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  min-width:0;
+}
+[data-atlas] .v2-tabs [role="tab"]:disabled{color:var(--t3);cursor:default;font-style:italic}
+[data-atlas] .v2-tabs [role="tab"]:hover{color:var(--t1)}
+[data-atlas] .v2-tabs [role="tab"][aria-selected="true"]{color:var(--t1);font-weight:600;
+  background:color-mix(in srgb,var(--accent) 9%,transparent);box-shadow:inset 0 -2px 0 var(--accent)}
+[data-atlas] .v2-tabn{
+  display:inline-block;margin-left:5px;padding:0 5px;border:1px solid var(--rule-3);
+  color:var(--t2);font-size:10.5px;letter-spacing:.5px;
+}
+[data-atlas] .v2-tabbody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--rule-3) transparent}
+[data-atlas] .v2-tabbody:has(> .ro){overflow:hidden;display:flex;flex-direction:column}
+[data-atlas] .v2-sealbar{
+  flex:none;display:flex;align-items:center;gap:12px;min-width:0;
+  padding:10px 0 0;border-top:1px solid var(--rule-2);
+}
+[data-atlas] .v2-seal{
+  flex:none;display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--at-mono);font-size:11px;font-weight:600;letter-spacing:1.6px;color:var(--chrome);
+  background:var(--accent);border:1px solid var(--accent);
+  padding:8px 13px;cursor:pointer;
+}
+[data-atlas] .v2-seal:hover{background:color-mix(in srgb,var(--accent) 82%,#fff)}
+[data-atlas] .v2-seal:focus-visible{outline:2px solid var(--t1);outline-offset:2px}
+[data-atlas] .v2-seal-g{flex:none}
+[data-atlas] .v2-sealnote{display:flex;flex-direction:column;gap:2px}
+[data-atlas] .v2-sealnote > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+[data-atlas] .v2-sealnote b{font-weight:500;color:var(--t2)}
+[data-atlas] .at-seal-ok{font-family:var(--at-sans);font-size:12.5px;color:var(--t2);margin:0 0 10px;
+  padding:5px 10px;border-left:2px solid var(--pos);background:color-mix(in srgb,var(--pos) 6%,transparent)}
+[data-atlas] .at-seal-ok b{font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--pos);font-weight:600;margin-right:6px}
+[data-atlas] .v2-sealnote .v2-seal-ok{color:var(--pos);font-weight:600}
+[data-atlas] .v2-sealnote{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:.5px;color:var(--t3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+}
+
+/* the selected storm */
+[data-atlas] .sj{
+  flex:none;display:flex;flex-direction:column;gap:7px;
+  padding:2px 0 10px;margin-bottom:4px;border-bottom:1px solid var(--rule-2);
+}
+[data-atlas] .sj-who{display:flex;align-items:baseline;gap:9px;min-width:0}
+[data-atlas] .sj-who .sj-x{margin-left:auto;background:none;border:0;color:var(--t3);cursor:pointer;font-size:14px;padding:0 2px}
+[data-atlas] .sj-who .sj-x:hover{color:var(--t1)}
+[data-atlas] .sj-name{font-family:var(--at-sans);font-size:19px;font-weight:600;color:var(--t1);letter-spacing:.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+[data-atlas] .sj-season{font-family:var(--at-mono);font-size:13px;color:var(--t2)}
+[data-atlas] .sj-meta{font-family:var(--at-mono);font-size:10.5px;color:var(--t3);letter-spacing:.6px;white-space:nowrap}
+[data-atlas] .sj-facts{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+[data-atlas] .sj-peak{display:flex;align-items:baseline;gap:6px;font-family:var(--at-mono);font-size:13px;color:var(--t1)}
+[data-atlas] .sj-peak i{width:9px;height:9px;display:inline-block;align-self:center}
+[data-atlas] .sj-src{font-size:10px;letter-spacing:1.1px;color:var(--t3)}
+[data-atlas] .sj-mem{font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.2px;color:var(--pos)}
+[data-atlas] .sj-mem.sj-out{color:var(--t3)}
+[data-atlas] .sj-acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+[data-atlas] .sj-acts button{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t2);cursor:pointer;
+  background:transparent;border:1px solid var(--rule-3);padding:4px 8px;white-space:nowrap;
+}
+[data-atlas] .sj-acts button:hover{color:var(--t1);border-color:var(--accent)}
+[data-atlas] .sj-acts button[aria-pressed="true"]{color:var(--t1);border-color:var(--accent)}
+[data-atlas] .v2-record-tab{padding-top:4px}
+[data-atlas] .v2-record-tab .at-insp-head,[data-atlas] .v2-record-tab .at-inspector{position:static}
+
+/* ── the ledger ────────────────────────────────────────────────────────────────────────── */
+[data-atlas] .lg{display:flex;flex-direction:column;min-width:0;padding-top:10px}
+[data-atlas] .lg-head{display:flex;align-items:flex-end;gap:12px;padding-bottom:7px;border-bottom:2px solid var(--t1)}
+[data-atlas] .lg-n{font-family:var(--at-mono);font-size:34px;font-weight:600;line-height:.9;letter-spacing:-1px;color:var(--t1)}
+[data-atlas] .lg-l{font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.2px;color:var(--t3);line-height:1.45;padding-bottom:2px}
+[data-atlas] .lg-denoms{color:var(--t2)}
+[data-atlas] .lg-state{margin-left:auto;font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.3px;color:var(--t1);padding-bottom:3px;white-space:nowrap}
+[data-atlas] .lg-state-no{color:var(--neg)}
+[data-atlas] .lg-top .lg-pointer{margin:0 0 9px;color:var(--warn);border-bottom-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+[data-atlas] .lg-syn{margin:0;padding:8px 0 7px;font-family:var(--at-sans);font-size:15.5px;line-height:1.38;color:var(--t1);text-wrap:pretty}
+[data-atlas] .lg-key{
+  display:flex;align-items:baseline;gap:10px;padding:0 0 3px;border-bottom:1px solid var(--t1);
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.2px;color:var(--t3);
+}
+[data-atlas] .lg-key-l{color:var(--t1);font-weight:600}
+[data-atlas] .lg-key-r{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+[data-atlas] .lg-colswitch{display:flex;gap:0;flex:none;border:1px solid var(--rule-3)}
+[data-atlas] .lg-colswitch button{
+  font-family:var(--at-mono);font-size:10px;letter-spacing:1px;color:var(--t3);cursor:pointer;
+  background:transparent;border:0;padding:2px 6px;
+}
+[data-atlas] .lg-colswitch button[aria-pressed="true"]{color:var(--t1);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+[data-atlas] .lg-rows{display:flex;flex-direction:column;min-width:0}
+[data-atlas] .lg-group{
+  display:flex;align-items:baseline;gap:10px;padding:12px 0 3px;border-bottom:1px solid var(--rule-3);
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1.5px;color:var(--t3);
+}
+[data-atlas] .lg-group-l{color:var(--t2)}
+[data-atlas] .lg-group-r{margin-left:auto;letter-spacing:.8px;text-align:right;min-width:0}
+[data-atlas] .lg-group-note{color:var(--t3)}
+[data-atlas] .lg-row{
+  display:grid;grid-template-columns:minmax(0,1fr) 92px 84px 64px;grid-template-rows:auto auto;
+  column-gap:12px;padding:7px 0 6px;border-bottom:1px solid var(--rule);min-width:0;
+}
+[data-atlas] .lg-row > *{min-width:0}
+[data-atlas] .lg-row[data-lens-row]{cursor:pointer}
+[data-atlas] .lg-row[data-lens-row]:hover{background:rgba(255,255,255,.025)}
+[data-atlas] .lg-row[data-lens-row]:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+[data-atlas] .lg-row[data-held]{background:rgba(255,255,255,.04);box-shadow:inset 2px 0 0 var(--accent);padding-left:8px}
+[data-atlas] .lg-name{
+  grid-column:1;grid-row:1;align-self:end;display:flex;align-items:baseline;gap:7px;min-width:0;
+  font-family:var(--at-sans);font-size:15.5px;line-height:1.1;color:var(--t1);
+}
+[data-atlas] .lg-name .at-dc-tick{width:3px;height:12px;display:inline-block;background:var(--bar,var(--rule-3));flex:none;align-self:center}
+[data-atlas] .lg-name .at-dc-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+[data-atlas] .lg-name .at-mark{font-family:var(--at-mono);font-size:11px;color:var(--t3);flex:none}
+[data-atlas] .lg-subj{font-family:var(--at-mono);font-size:9.5px;letter-spacing:1.1px;padding:1px 4px;flex:none;border:1px solid currentColor}
+[data-atlas] .lg-subj.at-reached{color:var(--pos)}
+[data-atlas] .lg-subj.at-notreached{color:var(--t3)}
+[data-atlas] .lg-row .at-ans-int{grid-column:2;grid-row:1;align-self:center;width:92px}
+[data-atlas] .lg-rate{grid-column:3;grid-row:1;align-self:end;text-align:right;white-space:nowrap}
+[data-atlas] .lg-rate .at-val{font-family:var(--at-mono);font-size:22px;font-weight:600;line-height:1;letter-spacing:-.5px;color:var(--t1)}
+[data-atlas] .lg-bigcount{font-family:var(--at-mono);font-size:19px;line-height:1;color:var(--t2)}
+[data-atlas] .lg-bigof{font-size:10.5px;letter-spacing:.8px;color:var(--t3)}
+[data-atlas] .lg-rate .at-slot{display:none}
+[data-atlas] .lg-right{grid-column:4;grid-row:1;align-self:end;text-align:right;white-space:nowrap;
+  font-family:var(--at-mono);font-size:12px;color:var(--t1)}
+[data-atlas] .lg-right .at-slot{color:var(--t3);font-size:10px;letter-spacing:.8px}
+[data-atlas] .lg-sup{grid-column:1 / 3;grid-row:2;padding-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:var(--at-mono);font-size:11px;color:var(--t2);letter-spacing:.2px}
+/* IN HOURS MODE THE LINE CARRIES THE P25-P75 THAT QUALIFIES THE MEDIAN, and an ellipsis cut
+   exactly that off at laptop widths. It wraps instead. */
+[data-atlas] [data-ledger-column="timing"] .lg-sup{white-space:normal;overflow:visible}
+[data-atlas] .lg-sup .at-val{color:inherit;font-size:inherit}
+[data-atlas] .lg-st{grid-column:3 / 5;grid-row:2;text-align:right;padding-top:2px;white-space:nowrap;
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t3)}
+[data-atlas] .lg-row[data-refused] .lg-st{color:var(--warn)}
+[data-atlas] .lg-row[data-nonmember] .lg-name{color:var(--t2)}
+[data-atlas] .lg-held{
+  display:flex;align-items:center;gap:12px;padding:6px 0 7px 10px;border-bottom:1px solid var(--rule);
+  background:rgba(255,255,255,.04);box-shadow:inset 2px 0 0 var(--accent);
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:.8px;color:var(--t2);
+}
+[data-atlas] .lg-held button{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t1);cursor:pointer;
+  background:transparent;border:1px solid var(--accent);padding:3px 8px;white-space:nowrap;flex:none;
+}
+[data-atlas] .lg-held .lg-held-x{border-color:var(--rule-3);color:var(--t3)}
+[data-atlas] .lg-foot{padding:10px 0 4px;display:flex;flex-direction:column;gap:6px}
+[data-atlas] .lg-cmp{font-family:var(--at-mono);font-size:10.5px;letter-spacing:.6px;line-height:1.6;color:var(--t3)}
+[data-atlas] .lg-cmp b{color:var(--t1);font-weight:400}
+[data-atlas] .lg-cmp-k{color:var(--t2);letter-spacing:1.3px}
+[data-atlas] .lg-holdout{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+[data-atlas] .lg-holdout button{
+  font-family:var(--at-mono);font-size:10.5px;letter-spacing:.3px;color:var(--t2);cursor:pointer;
+  background:transparent;border:1px solid var(--rule-3);padding:2px 7px;
+}
+[data-atlas] .lg-holdout button[aria-pressed="true"]{color:var(--t1);border-color:var(--accent)}
+[data-atlas] .lg-pointer{
+  align-self:flex-start;font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t2);
+  background:none;border:0;border-bottom:1px solid var(--rule-3);padding:0 0 1px;cursor:pointer;
+  text-align:left;
+}
+[data-atlas] .lg-pointer:hover{color:var(--t1);border-bottom-color:var(--accent)}
+
+/* ── the roster ────────────────────────────────────────────────────────────────────────── */
+[data-atlas] .ro{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;padding-top:10px}
+[data-atlas] .ro-head{flex:none;display:flex;flex-direction:column;gap:7px;padding-bottom:8px}
+[data-atlas] .ro-what{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-family:var(--at-sans);font-size:15px;color:var(--t2)}
+[data-atlas] .ro-what b{font-family:var(--at-mono);font-size:22px;font-weight:600;color:var(--t1)}
+[data-atlas] .ro-clear{
+  margin-left:auto;font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t2);cursor:pointer;
+  background:transparent;border:1px solid var(--rule-3);padding:2px 7px;
+}
+[data-atlas] .ro-clear:hover{color:var(--t1);border-color:var(--accent)}
+[data-atlas] .ro-note{font-family:var(--at-mono);font-size:10.5px;letter-spacing:.5px;color:var(--t3)}
+[data-atlas] .ro-tools{display:flex;gap:8px;align-items:center}
+[data-atlas] .ro-search{
+  flex:1 1 auto;min-width:0;font-family:var(--at-mono);font-size:12px;color:var(--t1);
+  background:var(--sunken);border:1px solid var(--rule-3);padding:6px 9px;border-radius:0;
+}
+[data-atlas] .ro-search:focus{outline:1px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+[data-atlas] .ro-sort{display:flex;border:1px solid var(--rule-3);flex:none}
+[data-atlas] .ro-sort button{
+  font-family:var(--at-mono);font-size:10px;letter-spacing:1px;color:var(--t3);cursor:pointer;
+  background:transparent;border:0;padding:5px 7px;
+}
+[data-atlas] .ro-sort button[aria-pressed="true"]{color:var(--t1);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+[data-atlas] .ro-cols,[data-atlas] .ro-row{
+  display:grid;grid-template-columns:minmax(0,1fr) 40px 78px 72px;gap:8px;align-items:center;
+}
+[data-atlas] .ro-cols{
+  flex:none;padding:0 8px 4px 0;border-bottom:1px solid var(--t1);
+  font-family:var(--at-mono);font-size:10px;letter-spacing:1.3px;color:var(--t3);
+}
+[data-atlas] .ro-list{flex:1 1 auto;min-height:160px;overflow-y:auto;position:relative;
+  scrollbar-width:thin;scrollbar-color:var(--rule-3) transparent}
+[data-atlas] .ro-row{
+  position:absolute;left:0;right:0;height:30px;padding:0 8px 0 0;cursor:pointer;text-align:left;
+  background:transparent;border:0;border-bottom:1px solid var(--rule);color:var(--t1);
+}
+[data-atlas] .ro-row:hover,[data-atlas] .ro-row[data-cursor],[data-atlas] .ro-row:focus-visible{background:rgba(255,255,255,.045);outline:0}
+[data-atlas] .ro-row[data-selected]{box-shadow:inset 2px 0 0 var(--accent);background:rgba(255,255,255,.05)}
+[data-atlas] .ro-name{font-family:var(--at-sans);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:6px}
+[data-atlas] .ro-name b{font-weight:600}
+[data-atlas] .ro-season{font-family:var(--at-mono);font-size:11.5px;color:var(--t2)}
+[data-atlas] .ro-basin,[data-atlas] .ro-lf{font-family:var(--at-mono);font-size:11px;color:var(--t3);letter-spacing:.5px;white-space:nowrap;overflow:hidden}
+[data-atlas] .ro-peak{display:flex;align-items:center;gap:5px;font-family:var(--at-mono);font-size:11.5px;color:var(--t1)}
+[data-atlas] .ro-peak i{width:8px;height:8px;display:inline-block;flex:none}
+[data-atlas] .ro-peak .ro-nocat{border:1px solid var(--t4)}
+[data-atlas] .ro-kt{color:var(--t3)}
+[data-atlas] .ro-empty{padding:18px 4px;font-family:var(--at-sans);font-size:13.5px;color:var(--t2)}
+
+/* ── the pick card ─────────────────────────────────────────────────────────────────────── */
+[data-atlas] .pk{
+  position:absolute;z-index:950;padding:10px 12px 12px;background:var(--chrome-raised);
+  border:1px solid var(--rule-3);box-shadow:0 14px 36px rgba(0,0,0,.55);
+  font-family:var(--at-sans);color:var(--t1);cursor:default;
+}
+[data-atlas] .pk-hd{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--at-mono);font-size:11px;letter-spacing:1px;color:var(--t2);padding-bottom:6px;border-bottom:1px solid var(--rule-2)}
+[data-atlas] .pk-x{background:none;border:0;color:var(--t3);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+[data-atlas] .pk-x:hover{color:var(--t1)}
+[data-atlas] .pk-counts{display:flex;flex-direction:column;gap:2px;padding:7px 0;font-size:12.5px;color:var(--t2);line-height:1.35}
+[data-atlas] .pk-counts b{font-family:var(--at-mono);color:var(--t1);font-weight:600}
+[data-atlas] .pk-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+[data-atlas] .pk-list button{
+  display:flex;align-items:center;gap:7px;width:100%;text-align:left;cursor:pointer;
+  background:transparent;border:0;border-bottom:1px solid var(--rule);padding:5px 2px;
+  font-family:var(--at-sans);font-size:13px;color:var(--t1);
+}
+[data-atlas] .pk-list button:hover,[data-atlas] .pk-list button:focus-visible{background:rgba(255,255,255,.05);outline:0}
+[data-atlas] .pk-list i{width:8px;height:8px;flex:none}
+[data-atlas] .pk-list b{font-weight:600}
+[data-atlas] .pk-peak{margin-left:auto;font-family:var(--at-mono);font-size:11px;color:var(--t3)}
+[data-atlas] .pk-none{font-size:12.5px;color:var(--t2);margin:4px 0}
+[data-atlas] .pk-more{margin-top:6px;font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t2);
+  background:none;border:0;border-bottom:1px solid var(--rule-3);padding:0 0 1px;cursor:pointer}
+[data-atlas] .pk-more:hover{color:var(--t1);border-bottom-color:var(--accent)}
+[data-atlas] .pk-ask{margin-top:10px;padding-top:9px;border-top:1px solid var(--rule-2);display:flex;flex-direction:column;gap:5px}
+[data-atlas] .pk-ask button{
+  font-family:var(--at-mono);font-size:11px;letter-spacing:1.2px;color:var(--t1);cursor:pointer;
+  background:color-mix(in srgb,var(--plate-accent) 12%,transparent);border:1px solid var(--plate-accent);padding:7px 10px;text-align:left;
+}
+[data-atlas] .pk-ask button:hover{background:color-mix(in srgb,var(--plate-accent) 22%,transparent)}
+[data-atlas] .pk-ask span{font-size:11.5px;color:var(--t3);line-height:1.35}
+
+/* ── the seal and the readings list ───────────────────────────────────────────────────── */
+[data-atlas] .sl-veil{position:fixed;inset:0;z-index:3000;background:rgba(5,8,12,.62);
+  display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px 16px}
+[data-atlas] .sl{width:min(680px,100%);max-height:84vh;overflow:auto;background:var(--chrome-raised);
+  border:1px solid var(--rule-3);box-shadow:0 24px 60px rgba(0,0,0,.6);padding:0 18px 18px}
+[data-atlas] .sl-hd{display:flex;justify-content:space-between;align-items:center;height:42px;
+  border-bottom:1px solid var(--rule-2);font-family:var(--at-mono);font-size:11px;letter-spacing:1.6px;color:var(--t2)}
+[data-atlas] .sl-x{background:none;border:0;color:var(--t3);cursor:pointer;font-size:18px}
+[data-atlas] .sl-x:hover{color:var(--t1)}
+[data-atlas] .sl-id{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:14px 0 10px;border-bottom:1px solid var(--rule)}
+[data-atlas] .sl-body{display:grid;grid-template-columns:238px minmax(0,1fr);gap:18px;padding:16px 0 4px}
+[data-atlas] .sl-stamp{
+  display:flex;flex-direction:column;gap:6px;justify-content:center;align-items:flex-start;
+  padding:14px 14px 13px;border:1px solid var(--accent);outline:1px solid color-mix(in srgb,var(--accent) 35%,transparent);
+  outline-offset:3px;background:color-mix(in srgb,var(--accent) 7%,transparent);
+}
+[data-atlas] .sl-stamp-k{font-family:var(--at-mono);font-size:9.5px;letter-spacing:1.8px;color:var(--accent)}
+[data-atlas] .sl-stamp-id{font-family:var(--at-mono);font-size:21px;font-weight:600;letter-spacing:1px;color:var(--t1);line-height:1.15}
+[data-atlas] .sl-stamp-at,[data-atlas] .sl-stamp-m{font-family:var(--at-mono);font-size:10.5px;letter-spacing:.6px;color:var(--t3)}
+[data-atlas] .sl-binds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;min-width:0}
+[data-atlas] .sl-binds li{display:grid;grid-template-columns:14px 72px minmax(0,1fr);align-items:baseline;gap:6px;min-width:0}
+[data-atlas] .sl-binds i{font-style:normal;color:var(--pos);font-size:12px}
+[data-atlas] .sl-binds .sl-v{font-family:var(--at-mono);font-size:12px;color:var(--t1);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-atlas] .sl-binds .sl-q{font-family:var(--at-sans);font-size:13px;white-space:normal;line-height:1.35;color:var(--t1)}
+[data-atlas] .sl-primary{display:flex;align-items:center;gap:12px;margin:14px 0 4px;min-width:0}
+[data-atlas] .sl-copy{
+  flex:none;font-family:var(--at-mono);font-size:11.5px;font-weight:600;letter-spacing:1.4px;color:var(--chrome);
+  background:var(--accent);border:1px solid var(--accent);padding:9px 14px;cursor:pointer;
+}
+[data-atlas] .sl-copy:hover{background:color-mix(in srgb,var(--accent) 82%,#fff)}
+[data-atlas] .sl-url{font-family:var(--at-mono);font-size:11px;color:var(--t3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-atlas] .sl-more{margin-top:12px;border-top:1px solid var(--rule);padding-top:8px}
+[data-atlas] .sl-more summary{font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t2);cursor:pointer;text-transform:uppercase}
+[data-atlas] .sl-more summary:hover{color:var(--t1)}
+[data-atlas] .sl-id > div{display:flex;flex-direction:column;gap:3px;min-width:0}
+[data-atlas] .sl-k{font-family:var(--at-mono);font-size:10px;letter-spacing:1.4px;color:var(--t3)}
+[data-atlas] .sl-id b{font-family:var(--at-mono);font-size:14px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-atlas] .sl-what,[data-atlas] .sl-cli,[data-atlas] .sl-log{font-family:var(--at-sans);font-size:13px;line-height:1.5;color:var(--t2);margin:10px 0}
+[data-atlas] .sl-cli code{font-family:var(--at-mono);font-size:11.5px;color:var(--t1);word-break:break-all}
+[data-atlas] .sl-log{font-size:12px;color:var(--t3)}
+[data-atlas] .sl-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+[data-atlas] .sl-acts button{
+  font-family:var(--at-mono);font-size:11px;letter-spacing:1.1px;color:var(--t1);cursor:pointer;
+  background:transparent;border:1px solid var(--accent);padding:6px 10px;
+}
+[data-atlas] .sl-acts button:hover{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+[data-atlas] .sl .at-spec{margin-top:6px}
+[data-atlas] .rd-list{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0}
+[data-atlas] .rd-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid var(--rule)}
+[data-atlas] .rd-stamp{font-family:var(--at-mono);font-size:12px;font-weight:600;letter-spacing:.6px;color:var(--t1);
+  border:1px solid var(--accent);outline:1px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px;padding:5px 7px;white-space:nowrap}
+[data-atlas] .rd-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+[data-atlas] .rd-acts{display:flex;gap:8px;align-items:center}
+[data-atlas] .rd-list .rd-open,[data-atlas] .rd-copy{font-family:var(--at-mono);font-size:10.5px;letter-spacing:1px;color:var(--t1);
+  background:none;border:1px solid var(--rule-3);padding:4px 8px;cursor:pointer;text-decoration:none}
+[data-atlas] .rd-list .rd-open:hover,[data-atlas] .rd-copy:hover{border-color:var(--accent)}
+[data-atlas] .rd-list a{font-family:var(--at-sans);font-size:13.5px;color:var(--t1);text-decoration:none;border-bottom:1px solid var(--rule-3)}
+[data-atlas] .rd-list a:hover{border-bottom-color:var(--accent)}
+[data-atlas] .rd-meta{display:block;font-family:var(--at-mono);font-size:10.5px;color:var(--t3);margin-top:3px}
+
+/* ── below the fold: the record ───────────────────────────────────────────────────────── */
+[data-atlas] .v2-forward{padding:18px var(--g) 0}
+[data-atlas] .v2-below{padding:0 var(--g);border-top:1px solid var(--rule-2);margin-top:4px}
+[data-atlas] .at-record{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 44px;padding:22px 0 30px;min-width:0;
+}
+[data-atlas] .at-record-col{min-width:0}
+[data-atlas] .at-record-wide{grid-column:1 / -1;min-width:0;margin-top:18px}
+[data-atlas] .at-record-h{
+  margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--t1);
+  font-family:var(--at-mono);font-size:11px;font-weight:600;letter-spacing:1.8px;color:var(--t1);
+}
+[data-atlas] .at-record .at-deck-limitgroups{margin-top:0;border-top:0;padding-top:8px}
+[data-atlas] .at-record .at-deck-limits{margin-top:14px}
+[data-atlas] .at-record .at-deck-pre,[data-atlas] .at-record .at-deck-foot-block,
+[data-atlas] .at-record .at-pre-assume,[data-atlas] .at-record .at-deck-env{margin-top:12px}
+[data-atlas] [data-section-focus]{outline:1px solid var(--accent);outline-offset:4px}
+[data-atlas].atlas-v2 .at-colophon{margin:0 var(--g)}
+
+/* ── when the plate loses width ────────────────────────────────────────────────────────── */
+@media (max-width:1279px){
+  [data-atlas].atlas-v2{--insp-w:clamp(360px,36vw,440px)}
+  [data-atlas] .v2-scope{display:none}
+  [data-atlas] .lg-row{grid-template-columns:minmax(0,1fr) 74px 78px 58px}
+  [data-atlas] .lg-row .at-ans-int{width:74px}
+}
+@media (max-width:1179px){
+  /* STACKED. The plate takes the full width and a fixed share of the viewport's height; the
+     inspector follows it at full width and scrolls with the page rather than inside itself. */
+  [data-atlas].atlas-v2{--g:18px}
+  [data-atlas] .v2-main{height:auto}
+  [data-atlas] .v2-work{display:block;grid-template-columns:1fr;padding-bottom:6px;min-height:0;height:auto}
+  [data-atlas].atlas-v2 .atlas-stage{flex:none;height:min(50vh,520px);min-height:300px}
+  [data-atlas] .v2-insp{border-left:0;padding-left:0;margin-top:16px;border-top:1px solid var(--rule-2);padding-top:4px}
+  [data-atlas] .v2-tabbody{overflow:visible}
+  [data-atlas] .v2-tabbody:has(> .ro){overflow:visible}
+  [data-atlas] .ro-list{height:min(60vh,520px);flex:none}
+  [data-atlas] .v2-sealbar{position:sticky;bottom:0;background:var(--chrome);padding-bottom:10px;z-index:20}
+  [data-atlas] .at-record{grid-template-columns:minmax(0,1fr)}
+  [data-atlas] .at-record-col + .at-record-col{margin-top:22px}
+  [data-atlas] .lv-meta{display:none}
+}
+@media (max-width:760px){
+  [data-atlas].atlas-v2{--g:14px;--top-h:auto;padding-bottom:58px}
+  /* TWO ROWS, NOT THREE: the wordmark and the three records on one, the live systems on the
+     next -- wrapping, never scrolling sideways. */
+  [data-atlas] .v2-top{flex-wrap:wrap;height:auto;padding:8px var(--g);gap:6px 12px}
+  [data-atlas] .v2-brand{flex:0 1 auto;gap:8px}
+  [data-atlas] .v2-back-w,[data-atlas] .v2-scope{display:none}
+  [data-atlas] .v2-word{font-size:12.5px;letter-spacing:2.4px}
+  [data-atlas] .v2-tools{gap:9px;margin-left:auto}
+  [data-atlas] .v2-tool{font-size:9px;letter-spacing:.6px}
+  [data-atlas] .v2-top > .v2-brand{order:0}
+  [data-atlas] .v2-top > .v2-tools{order:1}
+  [data-atlas] .lv{order:3;flex:1 1 100%;margin-left:0;flex-wrap:wrap;row-gap:6px}
+  [data-atlas] .at-cohort-min{white-space:nowrap}
+  [data-atlas] .at-cohort-n{white-space:normal}
+  [data-atlas].atlas-v2 .at-plate-figure .at-plate-acts,[data-atlas].atlas-v2 .at-plate-acts{display:flex;flex-wrap:wrap;white-space:normal;row-gap:4px;gap:4px 12px;max-width:100%;flex:1 1 100%;margin-left:0}
+  /* The bottom bar's SEAL is this control on a phone; one seal button per screen. */
+  [data-atlas] .v2-sealbar{display:none}
+  /* The small plate keeps its lower quarter: the legend is one short line, the attribution one
+     line that ellipsises. */
+  [data-atlas] .at-legend{right:6px;bottom:22px;max-width:70%;padding:3px 6px}
+  [data-atlas] .at-legend .at-lrow{font-size:9px}
+  [data-atlas] .leaflet-control-attribution{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-size:8.5px!important}
+  [data-atlas].atlas-v2 .v2-mnav{display:grid}
+  [data-atlas] .lv + .v2-tools{margin-left:auto}
+  /* ON A PHONE BOTH CARDS ARE SHEETS ABOVE THE BOTTOM BAR: the live card opened above the
+     screen's top edge and the pick card ran under the bar. */
+  [data-atlas] .lv-pop{position:fixed;left:8px;right:8px;top:auto!important;bottom:60px;width:auto;max-height:calc(100vh - 140px);overflow:auto;z-index:1300}
+  [data-atlas].atlas-v2 .at-question-text{font-size:22px;line-height:1.3}
+  [data-atlas].atlas-v2 .at-cohort{font-size:11px}
+  /* NO SIDEWAYS SCROLL FOR CONTROLS. The chips wrap onto as many lines as they need; a reader
+     on a phone sees every condition they can add without discovering a hidden scroll. */
+  [data-atlas] .at-addc{flex-wrap:wrap;overflow:visible;margin:4px 0 0;padding:0;border-left:0;flex:1 1 100%}
+  [data-atlas] .at-addc-b,[data-atlas] .at-addc-k{flex:none}
+  [data-atlas].atlas-v2 .atlas-stage{height:min(41vh,350px);min-height:240px}
+  [data-atlas].atlas-v2 .at-platehead{flex-wrap:wrap;row-gap:4px;overflow:visible;white-space:normal}
+  [data-atlas].atlas-v2 .at-platehead .at-plate-title,[data-atlas].atlas-v2 .at-platehead .at-r{display:none}
+  [data-atlas].atlas-v2 .at-layers{margin-left:0;padding-left:0;border-left:0}
+  [data-atlas].atlas-v2 .at-platefoot{flex-wrap:wrap;white-space:normal;row-gap:4px}
+  /* ON A PHONE THE FIGURE'S CAPTION GIVES WAY TO THE ANSWER. It restates the cohort line two
+     inches above it, and its PLATE NOTES are the desktop's; the class key and the measure stay. */
+  [data-atlas].atlas-v2 .at-plate-acts{margin-top:6px}
+  [data-atlas] .lg-row{grid-template-columns:minmax(0,1fr) 76px 56px;column-gap:8px}
+  [data-atlas] .lg-row .at-ans-int{display:none}
+  [data-atlas] .lg-rate{grid-column:2}
+  [data-atlas] .lg-right{grid-column:3}
+  [data-atlas] .lg-sup{grid-column:1 / 2;white-space:normal}
+  [data-atlas] .lg-st{grid-column:2 / 4}
+  [data-atlas] .lg-name{font-size:14.5px}
+  [data-atlas] .lg-rate .at-val{font-size:19px}
+  [data-atlas] .lg-key{flex-wrap:wrap;row-gap:4px}
+  [data-atlas] .ro-cols,[data-atlas] .ro-row{grid-template-columns:minmax(0,1fr) 34px 70px 48px;gap:6px}
+  [data-atlas] .sl-id{grid-template-columns:repeat(2,minmax(0,1fr))}
+  [data-atlas] .sl-body{grid-template-columns:1fr}
+  [data-atlas] .rd-item{grid-template-columns:minmax(0,1fr)}
+  [data-atlas] .sl-primary{flex-wrap:wrap}
+  [data-atlas] .sl-veil{padding:4vh 8px 8px}
+  [data-atlas] .pk{position:fixed;width:auto!important;left:8px!important;right:8px;top:auto!important;bottom:60px;max-height:calc(100vh - 150px)!important;overflow:auto;z-index:1300;box-shadow:0 -12px 40px rgba(0,0,0,.6)}
+  [data-atlas] .at-readouts{flex-wrap:wrap;max-width:100%}
+  [data-atlas] .at-transport{flex-wrap:wrap;max-width:100%}
+  [data-atlas] .at-sheet[data-sheet-anchored]{left:8px!important;right:8px;width:auto}
+  [data-atlas].atlas-v2 .at-classkey{flex-wrap:wrap;white-space:normal;row-gap:3px;overflow:visible;flex:1 1 100%}
+  [data-atlas].atlas-v2 .at-plate-hint{white-space:normal}
+  [data-atlas].atlas-v2 .at-plate-caption{height:auto;white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+  [data-atlas].atlas-v2 .at-plate-notes-body{width:calc(100vw - 40px);max-width:none}
+  [data-atlas].atlas-v2 .at-platefoot > span,[data-atlas].atlas-v2 .at-platefoot .at-plate-measure{flex-wrap:wrap;white-space:normal}
+  [data-atlas] .v2-plate,[data-atlas] .v2-insp,[data-atlas] .v2-q{max-width:100%;overflow-x:clip}
+}
+
+/* the limits, set as a list rather than a column of prose */
+[data-atlas] .at-record .at-limit-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:6px 0;border-bottom:1px solid var(--rule)}
+[data-atlas] .at-record .at-limit-which{font-size:13.5px}
+[data-atlas] .at-record .at-need{font-family:var(--at-mono);font-size:10.5px;color:var(--t3);text-align:right}
+[data-atlas] .at-record .at-limit-line .at-say-text{grid-column:1 / -1;font-size:12.5px;line-height:1.45;color:var(--t3);flex:none}
+
+/* the phone's way through the answer (MobileNav in atlas.jsx) */
+[data-atlas] .v2-mnav{
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:1200;
+  grid-template-columns:1fr 1fr 1.25fr 1fr;
+  background:color-mix(in srgb,var(--chrome-hi) 94%,transparent);backdrop-filter:blur(6px);
+  border-top:1px solid var(--rule-3);padding:0 0 env(safe-area-inset-bottom);
+}
+[data-atlas] .v2-mnav button{
+  font-family:var(--at-mono);font-size:11px;letter-spacing:1.3px;text-transform:uppercase;
+  color:var(--t2);background:none;border:0;border-top:2px solid transparent;
+  height:52px;cursor:pointer;
+}
+[data-atlas] .v2-mnav button span{color:var(--t3);font-size:10px;letter-spacing:.5px;margin-left:3px}
+[data-atlas] .v2-mnav button[aria-current="true"]{color:var(--t1);border-top-color:var(--accent)}
+[data-atlas] .v2-mnav .v2-mnav-seal{color:var(--t1);border-left:1px solid var(--rule-2)}
+
+/* a limit whose sentence repeats an earlier one's shape: its contract and counts, and its own
+   sentence one press away (LimitBlock in evidence-deck.jsx) */
+[data-atlas] .at-say-more{grid-column:1 / -1}
+[data-atlas] .at-say-more summary{font-family:var(--at-sans);font-size:12px;letter-spacing:0;color:var(--t3);cursor:pointer;list-style:none}
+[data-atlas] .at-say-more summary::before{content:"+ ";color:var(--t3)}
+[data-atlas] .at-say-more[open] summary::before{content:"− "}
+[data-atlas] .at-say-more summary:hover{color:var(--t1)}
+[data-atlas] .at-deck-cite-seal{font-family:var(--at-sans);font-size:12.5px;line-height:1.5;color:var(--t2);margin:8px 0 0}
+[data-atlas] .at-say-remedy + .at-say-link{margin-left:10px}

@@ -34,8 +34,12 @@ export const CALIBRATION_FILE = "atlas-calibration.json";
 /** Verdicts the scope audit emits, and how a reader should weigh each. */
 export const VERDICT = {
   agreed_scoreable: {
-    label: "CALIBRATED", tone: "pos",
-    short: "the gate allows a skill claim and the replay earned one",
+    /* NOT "CALIBRATED". Brier skill against climatology is not calibration (reliability), and
+       the emitter's test is a POINT skill above zero with no interval -- one of the six rows it
+       labels this way has a season-block interval that includes zero. The label says exactly
+       what was measured. */
+    label: "BEAT CLIMATOLOGY · POINT ESTIMATE", tone: "pos",
+    short: "the gate allows a skill claim and the replay's point skill beat climatology; no interval was computed",
   },
   agreed_refused: {
     label: "CORRECTLY REFUSED", tone: "pos",

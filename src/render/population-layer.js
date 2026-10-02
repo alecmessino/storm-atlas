@@ -58,7 +58,7 @@ export const PopulationLayer = AtlasLayer.extend({
        and the reader could not tell which line they had asked about. The pool is still visible,
        because "which of these did I pick" is the question and hiding the rest would answer a
        different one -- it simply stops out-inking the thing it is context for. */
-    liftedDimAlpha: 0.2,
+    liftedDimAlpha: 0.12,
     trackWidth: 0.85,
     liftedWidth: 1.3,
     showGenesis: true,
@@ -104,8 +104,10 @@ export const PopulationLayer = AtlasLayer.extend({
    *
    * The rest of the cohort stays visible and loses only INK, never contrast: "which of these
    * reached Category 4" is a comparison, and hiding the others answers a different question. */
-  setLens(rows) {
+  setLens(rows, ink = null, single = false) {
     this._lens = rows && rows.length ? new Set(rows) : null;
+    this._lensInk = ink || EMPHASIS_INK;
+    this._lensSingle = !!single;
     this.redraw();
     return this;
   },
@@ -161,13 +163,20 @@ export const PopulationLayer = AtlasLayer.extend({
       : o.softenEmphasis ? o.liftedSoftAlpha : o.liftedAlpha;
     /* THREE STANDINGS WHILE A ROW IS HELD, and the middle one is the point: the cohort is still
        there, still drawn, still the thing the lifted storms are a fraction OF. */
+    /* THE HELD SET IS UNMISTAKABLE, NOT MERELY BRIGHTER. Against three thousand blue tracks and
+       a blue density surface, a lifted set in a slightly lighter blue read as more of the same.
+       It is drawn in the held row's own ink over a dark casing, a little heavier, and the rest
+       of the cohort steps further back while it is held -- still there, still the thing the
+       lifted storms are a fraction of. One storm from the roster is heavier again. */
+    const lensWidth = this._lensSingle ? 2.4 : Math.max(o.liftedWidth, 1.5);
     const passes = lens
       ? [{ rows: rows.filter((i) => !lens.has(i) && !(emph && emph.has(i))),
-           alpha: base, width: o.trackWidth, ink: POPULATION_INK },
+           alpha: base * 0.7, width: o.trackWidth, ink: POPULATION_INK },
          { rows: rows.filter((i) => !lens.has(i) && emph && emph.has(i)),
-           alpha: o.lensRestAlpha, width: o.trackWidth, ink: POPULATION_INK },
-         { rows: rows.filter((i) => lens.has(i)),
-           alpha: liftedAlpha, width: o.liftedWidth, ink: EMPHASIS_INK }]
+           alpha: o.lensRestAlpha * 0.6, width: o.trackWidth, ink: POPULATION_INK },
+         { rows: rows.filter((i) => lens.has(i)), casing: true,
+           alpha: o.dimmed ? 0.55 : 0.95, width: lensWidth, ink: this._lensInk || EMPHASIS_INK,
+           solid: true }]
       : emph
         ? [{ rows: rows.filter((i) => !emph.has(i)), alpha: base, width: o.trackWidth,
              ink: POPULATION_INK },
@@ -177,9 +186,18 @@ export const PopulationLayer = AtlasLayer.extend({
 
     for (const pass of passes) {
       if (!pass.rows.length) continue;
+      if (pass.casing) {
+        ctx.globalAlpha = Math.min(1, pass.alpha * 0.85);
+        ctx.lineWidth = pass.width + 2.6;
+        ctx.strokeStyle = "#05080d";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        this._tracePaths(ctx, pass.rows, wx, wy, scale, ox, oy, width, height, stride, -1);
+        ctx.stroke();
+      }
       ctx.globalAlpha = pass.alpha;
       ctx.lineWidth = pass.width;
-      if (o.colorBy === "intensity") {
+      if (o.colorBy === "intensity" && !pass.solid) {
         segments += this._drawByCategory(ctx, pass.rows, wx, wy, scale, ox, oy, width, height,
           stride, pass.width);
       } else {
@@ -376,13 +394,17 @@ export const PopulationLayer = AtlasLayer.extend({
       ctx.arc(x, y, rad, 0, TAU);
     }
     ctx.fill();
+    /* THE COHORT'S GENESIS POINTS STEP BACK WHEN SOMETHING ELSE IS THE SUBJECT -- a selected storm
+       or a held row -- and a held row's own points take its ink, so the start of every lifted
+       track is marked in the colour of the row that lifted it. */
+    const lens = this._lens;
     if (emph) {
-      ctx.globalAlpha = 0.95;
+      ctx.globalAlpha = this.options.dimmed ? 0.35 : lens ? 0.3 : 0.95;
       ctx.fillStyle = GENESIS_LIFTED_INK;
       ctx.beginPath();
       for (let r = 0; r < rows.length; r++) {
         const i = rows[r];
-        if (!emph.has(i)) continue;
+        if (!emph.has(i) || (lens && lens.has(i))) continue;
         const la = lat[i];
         if (Number.isNaN(la)) continue;
         const p = worldOf(la, lon[i]);
@@ -393,6 +415,27 @@ export const PopulationLayer = AtlasLayer.extend({
         ctx.arc(x, y, rad + 0.85, 0, TAU);
       }
       ctx.fill();
+    }
+    if (lens && !this._lensSingle) {
+      ctx.globalAlpha = this.options.dimmed ? 0.5 : 1;
+      ctx.fillStyle = this._lensInk || GENESIS_LIFTED_INK;
+      ctx.strokeStyle = "#05080d";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let r = 0; r < rows.length; r++) {
+        const i = rows[r];
+        if (!lens.has(i)) continue;
+        const la = lat[i];
+        if (Number.isNaN(la)) continue;
+        const p = worldOf(la, lon[i]);
+        const x = p.wx * scale - ox;
+        const y = p.wy * scale - oy;
+        if (x < -4 || y < -4 || x > width + 4 || y > height + 4) continue;
+        ctx.moveTo(x + rad + 1.3, y);
+        ctx.arc(x, y, rad + 1.3, 0, TAU);
+      }
+      ctx.fill();
+      ctx.stroke();
     }
     ctx.globalAlpha = 1;
   },
@@ -413,7 +456,9 @@ export const PopulationLayer = AtlasLayer.extend({
     ctx.strokeStyle = LANDFALL_INK;
     ctx.lineWidth = 1;
     for (const pass of emph ? [false, true] : [false]) {
-      ctx.globalAlpha = pass ? 0.95 : (emph || this.options.dimmed ? 0.32 : 0.6);
+      /* Quieter than the tracks at rest: the crosses number in the thousands along one
+         coastline, and at 0.6 they drew a second coast over the first. */
+      ctx.globalAlpha = pass ? 0.85 : (emph || this.options.dimmed ? 0.2 : 0.32);
       ctx.beginPath();
       for (let r = 0; r < rows.length; r++) {
         const i = rows[r];

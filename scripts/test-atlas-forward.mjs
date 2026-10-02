@@ -40,7 +40,8 @@ import {
 } from "../docs/storm-atlas/src/engine/forward.js";
 import * as FWD from "../docs/storm-atlas/src/engine/forward.js";
 import {
-  OFFICIAL_FILE, categoryLadder, isNewerVintage, officialPoints, operationalLifecycle,
+  OFFICIAL_FILE, categoryLadder, isNewerVintage, officialFromForecast, officialPoints,
+  operationalLifecycle,
 } from "../docs/storm-atlas/src/engine/live.js";
 import { ROOT } from "./lib/atlas-verify.mjs";
 
@@ -281,30 +282,42 @@ console.log("\n[8] the SHIPPED payloads still have the shape the view reads");
   const live = await openLive(DATA);
   ok("the live layer loads", live.ok, String(live.error));
   /* THE PATH THE SHELL WILL ACTUALLY FETCH, RESOLVED THE WAY A BROWSER RESOLVES IT.
-     `OFFICIAL_FILE` is relative to the Atlas's own data base, and the file it names is the
-     forecast payload one directory further up. The first draft climbed once instead of twice
-     and resolved to `storm-atlas/data/latest.json`, which does not exist: the fetch 404'd, the
-     surface reported "the forecast payload could not be read", and nothing in the code looked
-     wrong. So the string is resolved here, against the base the shell passes, and the file has
-     to be on disk where it lands. */
+     The official forecast now ships beside the live artifact as atlas-forecast-v1.json, written
+     from the capture by the feed. It used to be the forecast payload (docs/data/latest.json),
+     which carries no cone, no guidance and no first-seen instant. The string is still resolved here, against the base
+     the shell passes, and the file has to be on disk where it lands. */
   const PAGE_DIR = "/storm-atlas/";
   const DATA_BASE = "data";                        // as ui/atlas.jsx declares it
   const resolved = new URL(`${DATA_BASE}/${OFFICIAL_FILE}`, `http://x${PAGE_DIR}`).pathname;
-  ok("the official-forecast path resolves out of the Atlas and onto the forecast payload",
-    resolved === "/storm-atlas/data/latest.json", `${DATA_BASE}/${OFFICIAL_FILE} -> ${resolved}`);
+  ok("the official-forecast path resolves to the capture-fed forecast file beside the live artifact",
+    resolved === "/storm-atlas/data/atlas-forecast-v1.json", `${DATA_BASE}/${OFFICIAL_FILE} -> ${resolved}`);
   const onDisk = join(ROOT, "docs", resolved.replace(/^\//, ""));
   ok("and a file is actually shipped at that path", existsSync(onDisk), onDisk);
 
-  const latest = JSON.parse(await readFile(onDisk, "utf8"));
-  ok("the forecast payload declares a generatedAt", !!latest.generatedAt);
-  ok("and carries a storms array", Array.isArray(latest.storms) && latest.storms.length > 0);
+  const fc = JSON.parse(await readFile(onDisk, "utf8"));
+  ok("the forecast file declares its schema and a generated_at", fc.schema === "atlas-forecast-v1" && !!fc.generated_at);
+  ok("and carries a storms object keyed by ATCF id", fc.storms && typeof fc.storms === "object" && !Array.isArray(fc.storms));
+  /* Here the live artifact is written by the site's own ten-minute refresh and the forecast file by
+     the capture feed, so the two stamps differ by design. What must hold is the as-of rule: nothing
+     in the forecast file was first seen after its own instant. */
+  const fcT = Date.parse(fc.generated_at);
+  ok("its generated_at is an instant, and nothing in it was first seen after that instant",
+    Number.isFinite(fcT) && Object.values(fc.storms).every((s) => !s.ok
+      || (Date.parse(s.known_at) <= fcT && Date.parse(s.source.first_seen) <= fcT
+        && ((s.watch && s.watch.rows) || []).every((r) => Date.parse(r.known_at) <= fcT))));
+  const layer = { ok: true, generatedAt: fc.generated_at, storms: fc.storms };
 
   for (const id of (live.health && live.health.active_atcf_ids) || []) {
     const r = live.record(id);
     const l = operationalLifecycle(r.fixes, ladder);
-    const storm = latest.storms.find((s) => String(s.id || "").toUpperCase() === id);
-    if (!storm) { console.log(`  note  ${id} (${r.name}) — no official forecast in the payload`); continue; }
-    const pp = officialPoints(storm, latest);
+    const one = officialFromForecast(layer, id);
+    if (!one.ok) { console.log(`  note  ${id} (${r.name}) — no official forecast in the file: ${one.error}`); continue; }
+    const storm = fc.storms[id];
+    ok(`${id}: every advisory lead hour is hours from the advisory's own first point`,
+      one.points.every((p) => p.label_hr === Math.round((p.validMs - one.points[0].validMs) / 3600000)));
+    ok(`${id}: the vintage names the capture and the advisory`,
+      /first seen by the capture/.test(one.vintage.source) && one.vintage.advisory === storm.advisory && !!one.vintage.first_seen);
+    const pp = one;
     ok(`${id}: every official point carries a parseable absolute valid time`,
       pp.dropped === 0 && pp.points.every((p) => Number.isFinite(p.validMs)),
       `dropped ${pp.dropped}`);
