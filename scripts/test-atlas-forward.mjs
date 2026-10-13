@@ -298,13 +298,18 @@ console.log("\n[8] the SHIPPED payloads still have the shape the view reads");
   ok("the forecast file declares its schema and a generated_at", fc.schema === "atlas-forecast-v1" && !!fc.generated_at);
   ok("and carries a storms object keyed by ATCF id", fc.storms && typeof fc.storms === "object" && !Array.isArray(fc.storms));
   /* Here the live artifact is written by the site's own ten-minute refresh and the forecast file by
-     the capture feed, so the two stamps differ by design. What must hold is the as-of rule: nothing
-     in the forecast file was first seen after its own instant. */
+     the capture feed, so the two stamps differ by design. THE PUBLIC CUT (12 Oct 2026) withholds the
+     capture's observation times, guidance and watch verdicts: generated_at is the file's build time
+     and known_at / source.first_seen are null. The first-seen as-of rule is enforced on the full
+     feed, privately, before the cut; what this file can still be held to is that no advisory in it
+     was issued after the file was built, and that no capture instant has come back. */
   const fcT = Date.parse(fc.generated_at);
-  ok("its generated_at is an instant, and nothing in it was first seen after that instant",
-    Number.isFinite(fcT) && Object.values(fc.storms).every((s) => !s.ok
-      || (Date.parse(s.known_at) <= fcT && Date.parse(s.source.first_seen) <= fcT
-        && ((s.watch && s.watch.rows) || []).every((r) => Date.parse(r.known_at) <= fcT))));
+  ok("its generated_at is an instant, and no advisory in it was issued after that instant",
+    Number.isFinite(fcT) && Object.values(fc.storms).every((s) => !s.ok || Date.parse(s.issued) <= fcT),
+    fc.generated_at);
+  ok("capture instants, guidance and watch verdicts are withheld, not carried",
+    fc.watch && fc.watch.withheld === true && Object.values(fc.storms).every((s) => !s.ok
+      || (s.known_at === null && s.source && s.source.first_seen === null && s.guidance === null && s.watch === null)));
   const layer = { ok: true, generatedAt: fc.generated_at, storms: fc.storms };
 
   for (const id of (live.health && live.health.active_atcf_ids) || []) {
@@ -315,8 +320,10 @@ console.log("\n[8] the SHIPPED payloads still have the shape the view reads");
     const storm = fc.storms[id];
     ok(`${id}: every advisory lead hour is hours from the advisory's own first point`,
       one.points.every((p) => p.label_hr === Math.round((p.validMs - one.points[0].validMs) / 3600000)));
-    ok(`${id}: the vintage names the capture and the advisory`,
-      /first seen by the capture/.test(one.vintage.source) && one.vintage.advisory === storm.advisory && !!one.vintage.first_seen);
+    ok(`${id}: the vintage names the advisory, and claims no capture it does not carry`,
+      one.vintage.advisory === storm.advisory && one.vintage.issued === storm.issued
+        && one.vintage.first_seen === null && !/first seen by the capture/.test(one.vintage.source),
+      JSON.stringify({ source: one.vintage.source, advisory: one.vintage.advisory, issued: one.vintage.issued }));
     const pp = one;
     ok(`${id}: every official point carries a parseable absolute valid time`,
       pp.dropped === 0 && pp.points.every((p) => Number.isFinite(p.validMs)),

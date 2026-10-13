@@ -41,8 +41,10 @@ const RECORD = {
   ships_rt: SHIPS, source: SOURCE, active: "*",
 };
 const IDS = ["*"];
-/* atlas-forecast-v1.json: the official advisory, NHC's cone, the guidance family runs and the
-   disagreement watch's newest row per PUBLIC coast exposure, as first seen by the capture. */
+/* atlas-forecast-v1.json: the official advisory and NHC's cone. Since the public cut of 12 Oct 2026
+   the file withholds model guidance, disagreement-watch verdicts and the capture's observation
+   times: those keys stay in the shape (so a withheld value reads as null, not as a missing field)
+   and forecastRules below refuses any of them carrying a value. */
 const WATCH_ROW = {
   geometry: "*", label: "*", provenance_kind: "*", state: "*", known_at: "*", advisory: "*", cycle: "*",
   lead_h: "*", thresholds_in_sample: "*", reasons: [{ code: "*", text: "*" }],
@@ -114,19 +116,20 @@ export function check(obj, spec, path = "$", errs = []) {
   return errs;
 }
 
-/* Value rules the shape cannot express. The forecast file publishes watch rows for PUBLIC
-   exposures only, and it is an as-of record: nothing in it was first seen after its own instant. */
+/* Value rules the shape cannot express. The forecast file is an as-of record: no advisory in it was
+   issued after its own instant. And it is the PUBLIC CUT: capture instants (known_at,
+   source.first_seen), guidance and watch verdicts are withheld, so each must be null and the file must
+   say so (watch.withheld). Putting any of them back is a publication decision, made here in review. */
 function forecastRules(obj, errs) {
   const T = Date.parse(obj.generated_at);
   if (!Number.isFinite(T)) { errs.push("$.generated_at: not an instant"); return; }
+  if (!(obj.watch && obj.watch.withheld === true)) errs.push("$.watch.withheld: watch verdicts not marked withheld");
   for (const [id, s] of Object.entries(obj.storms || {})) {
     if (!s || !s.ok) continue;
-    for (const [k, v] of [["known_at", s.known_at], ["source.first_seen", s.source && s.source.first_seen], ["guidance.first_seen", s.guidance && s.guidance.first_seen]]) {
-      if (v != null && !(Date.parse(v) <= T)) errs.push(`$.storms.${id}.${k}: after generated_at`);
-    }
-    for (const [i, r] of ((s.watch && s.watch.rows) || []).entries()) {
-      if (r.provenance_kind !== "PUBLIC") errs.push(`$.storms.${id}.watch.rows[${i}]: exposure is not PUBLIC`);
-      if (r.known_at != null && !(Date.parse(r.known_at) <= T)) errs.push(`$.storms.${id}.watch.rows[${i}].known_at: after generated_at`);
+    if (!(Date.parse(s.issued) <= T)) errs.push(`$.storms.${id}.issued: not an instant at or before generated_at`);
+    for (const [k, v] of [["known_at", s.known_at], ["source.first_seen", s.source && s.source.first_seen],
+      ["guidance", s.guidance], ["watch", s.watch]]) {
+      if (v != null) errs.push(`$.storms.${id}.${k}: withheld from the public cut, but carries a value`);
     }
   }
 }
@@ -141,14 +144,14 @@ function selfTest() {
   const live = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-live-v1.json"), "utf8"));
   const off = JSON.parse(readFileSync(resolve(ROOT, "docs/data/latest.json"), "utf8"));
   const id = Object.keys(live.storms)[0];
-  /* The forecast mutations need a storm with watch rows. The published file withholds watch verdicts (12 Oct 2026),
-     so they run on the synthetic feed fixture; the published file is still checked as-is ("forecast (published): clean"). */
+  /* The forecast mutations run on the synthetic feed fixture cut the way the producer cuts it, so they
+     hold whatever storms are active; the published file is still checked as-is. The uncut fixture is
+     the private shape (guidance, verdicts, capture instants) and must be refused. */
   const mut = (o, f) => { const c = structuredClone(o); f(c); return c; };
   const fcLive = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-forecast-v1.json"), "utf8"));
-  const hasRows = (f) => Object.values(f.storms || {}).some((s) => s && s.ok && s.watch && s.watch.rows && s.watch.rows.length);
-  const fc = hasRows(fcLive) ? fcLive : JSON.parse(readFileSync(resolve(ROOT, "scripts/fixtures/atlas-feed/atlas-forecast-20261001T0108Z.json"), "utf8"));
-  const fid = Object.keys(fc.storms).find((k) => fc.storms[k].ok && fc.storms[k].watch && fc.storms[k].watch.rows.length);
-  const withheld = mut(fc, (c) => { c.watch = { supplied: true, engine: c.watch.engine, withheld: true };
+  const full = JSON.parse(readFileSync(resolve(ROOT, "scripts/fixtures/atlas-feed/atlas-forecast-20261001T0108Z.json"), "utf8"));
+  const fid = Object.keys(full.storms).find((k) => full.storms[k].ok && full.storms[k].watch && full.storms[k].watch.rows.length);
+  const fc = mut(full, (c) => { c.watch = { supplied: true, engine: c.watch.engine, withheld: true };
     for (const s of Object.values(c.storms)) if (s.ok) Object.assign(s, { known_at: null, guidance: null, watch: null, source: { ...s.source, first_seen: null } }); });
   const cases = [
     ["live: clean", "atlas-live-v1.json", live, 0],
@@ -164,13 +167,16 @@ function selfTest() {
     ["live: repo link in a url", "atlas-live-v1.json", mut(live, (c) => { c.source.url = "https://github.com/alecmessino/category-alpha"; }), 1],
     ["live: internal route", "atlas-live-v1.json", mut(live, (c) => { c.source.note = "see /briefs/ledger"; }), 1],
     ["forecast (published): clean", "atlas-forecast-v1.json", fcLive, 0],
-    ["forecast: clean", "atlas-forecast-v1.json", fc, 0],
-    ["forecast: guidance, verdicts and capture times withheld", "atlas-forecast-v1.json", withheld, 0],
-    ["forecast: a non-PUBLIC watch row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].provenance_kind = "SYNTHETIC"; }), 1],
-    ["forecast: a packet id on a row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].packet_id = "f"; }), 1],
+    ["forecast: the public cut (guidance, verdicts and capture times withheld)", "atlas-forecast-v1.json", fc, 0],
+    ["forecast: the uncut private shape", "atlas-forecast-v1.json", full, 1],
+    ["forecast: a capture instant put back (known_at)", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].known_at = full.storms[fid].known_at; }), 1],
+    ["forecast: a capture instant put back (source.first_seen)", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].source.first_seen = full.storms[fid].source.first_seen; }), 1],
+    ["forecast: guidance put back", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].guidance = full.storms[fid].guidance; }), 1],
+    ["forecast: a watch verdict put back", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch = full.storms[fid].watch; }), 1],
+    ["forecast: watch not marked withheld", "atlas-forecast-v1.json", mut(fc, (c) => { c.watch.withheld = false; }), 1],
+    ["forecast: an advisory issued after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].issued = "2999-01-01T00:00:00Z"; }), 1],
+    ["forecast: generated_at not an instant", "atlas-forecast-v1.json", mut(fc, (c) => { c.generated_at = null; }), 1],
     ["forecast: a capture run id", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.capture_run = "x"; }), 1],
-    ["forecast: advisory first seen after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].source.first_seen = "2999-01-01T00:00:00Z"; }), 1],
-    ["forecast: watch row known after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].known_at = "2999-01-01T00:00:00Z"; }), 1],
     ["forecast: a filesystem path in a note", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.note = "/home/user/x"; }), 1],
   ];
   let bad = 0;
