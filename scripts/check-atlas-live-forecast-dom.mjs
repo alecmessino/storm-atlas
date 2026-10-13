@@ -50,6 +50,11 @@ const FC_DIS = JSON.parse(JSON.stringify(FC));
   w.rows.sort((a, b) => (a.state === "DISAGREEMENT" ? -1 : b.state === "DISAGREEMENT" ? 1 : 0));
   w.worst = "DISAGREEMENT";
 }
+/* [8]: exactly what the public cut publishes since 12 Oct 2026: the NHC advisory and cone only; model guidance,
+   watch verdicts and capture instants withheld (null), and the file's own build time as generated_at. */
+const FC_WITHHELD = JSON.parse(JSON.stringify(FC));
+FC_WITHHELD.watch = { supplied: true, engine: FC.watch.engine, withheld: true };
+for (const s of Object.values(FC_WITHHELD.storms)) if (s.ok) Object.assign(s, { known_at: null, guidance: null, watch: null, source: { ...s.source, first_seen: null } });
 const FC_NOWATCH = JSON.parse(JSON.stringify(FC));
 FC_NOWATCH.watch = { supplied: false };
 for (const s of Object.values(FC_NOWATCH.storms)) if (s.ok) s.watch = null;
@@ -175,6 +180,23 @@ console.log("\n[live-forecast-dom] storm -> history -> forecast -> your cell, an
   await page.click('[data-live-system="EP152026"]'); await page.waitForTimeout(600);
   ok("[5] the card says the watch was not supplied", /NOT SUPPLIED/.test((await txt(page, "[data-live-watch-absent]")) || ""));
   ok("[5] and never shows QUIET in its place", !(await page.$('[data-live-watch-row="QUIET"]')));
+  ok("nothing thrown", errors.length === 0, errors.join(" · "));
+  await ctx.close();
+}
+
+/* ---- [8] the public cut: guidance, verdicts and capture instants withheld --------------------- */
+{
+  serve = { live: LIVE, fc: FC_WITHHELD };
+  const { ctx, page, errors } = await open({ clock: "2026-10-01T02:00:00Z" });
+  console.log("\n  ── the public cut (guidance, verdicts and capture instants withheld)");
+  ok("[8] no chip carries a verdict", !(await page.$("[data-live-watch]")));
+  await page.click('[data-live-system="EP182026"]'); await page.waitForTimeout(800);
+  const card = await txt(page, "[data-live-forecast]");
+  ok("[8] the official advisory is still shown", !!card && card.includes(`#${FC.storms.EP182026.advisory}`), String(card).slice(0, 160));
+  ok("[8] guidance reads WITHHELD, never 'all families' or a count", !!(await page.$("[data-live-guidance-withheld]")) && !/ALL FAMILIES|of \d+ families/.test(card || ""), String(card).slice(0, 240));
+  ok("[8] the watch says its verdicts are withheld, and shows no QUIET", /WITHHELD/.test((await txt(page, "[data-live-watch-withheld]")) || "") && !(await page.$('[data-live-watch-row]')));
+  ok("[8] no capture instant is shown as FIRST SEEN", !/FIRST SEEN/.test(card || "") && !/FIRST SEEN/.test((await txt(page, "[data-forward-vintage-row]")) || ""));
+  ok("[8] no model run is drawn or counted", !(await page.$("[data-pick-live-runs]")) && !/guidance runs/.test((await page.evaluate(() => document.body.innerText)) || ""));
   ok("nothing thrown", errors.length === 0, errors.join(" · "));
   await ctx.close();
 }

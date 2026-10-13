@@ -153,10 +153,12 @@ function forecastSummary(layer, atcfId) {
     advisory: rec.advisory, issued: ms(rec.issued), firstSeen: ms(rec.source && rec.source.first_seen),
     knownAt: ms(rec.known_at), points: (rec.trackPoints || []).length,
     cone: rec.cone ? { kind: rec.cone.kind, advisory: rec.cone.advisory, matches: rec.cone.matches_tcm } : null,
-    guidance: { cycle: g.cycle || null, ageH: g.age_h, runs: (g.runs || []).length,
+    /* A NULL GUIDANCE BLOCK IS WITHHELD, NOT EMPTY: it must never read as "all families" or as zero runs. */
+    guidance: rec.guidance ? { cycle: g.cycle || null, ageH: g.age_h, runs: (g.runs || []).length,
       families: (g.runs || []).length + (g.missing || []).length, missing: g.missing || [],
-      stale: g.stale || [], members: g.member_count || 0 },
+      stale: g.stale || [], members: g.member_count || 0 } : null,
     watchSupplied: !!(layer.watch && layer.watch.supplied),
+    watchWithheld: !!(layer.watch && layer.watch.withheld),
     watch: w ? {
       engine: w.engine, asOf: ms(w.as_of), current: !!w.evaluated_this_state, worst: w.worst,
       alerts: w.rows.filter((r) => WATCH_ALERT.has(r.state)).map((r) => ({ id: r.geometry, label: r.label,

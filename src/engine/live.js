@@ -158,7 +158,7 @@ export function officialFromForecast(layer, atcfId) {
   }
   const parsed = officialPoints(rec, { generatedAt: layer.generatedAt });
   parsed.vintage = { ...parsed.vintage,
-    source: "NHC forecast advisory (TCM), as first seen by the capture",
+    source: rec.source && rec.source.first_seen ? "NHC forecast advisory (TCM), as first seen by the capture" : "NHC forecast advisory (TCM)",
     advisory: rec.advisory || null, issued: rec.issued || null,
     first_seen: rec.source ? rec.source.first_seen : null };
   return { ok: true, error: null, atcf_id: id, ...parsed };

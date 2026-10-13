@@ -86,7 +86,7 @@ function ForecastNow({ fc }) {
     );
   }
   const g = fc.guidance;
-  const cyc = g.cycle ? `${g.cycle.slice(6, 8)}/${g.cycle.slice(8, 10)}Z` : "no cycle";
+  const cyc = g && g.cycle ? `${g.cycle.slice(6, 8)}/${g.cycle.slice(8, 10)}Z` : "no cycle";
   const w = fc.watch;
   return (
     <div className="at-live-fc" data-live-forecast>
@@ -94,16 +94,25 @@ function ForecastNow({ fc }) {
       <Reading label="NHC ADVISORY" qualifier={fc.firstSeen ? `FIRST SEEN ${fmtUTC(fc.firstSeen)}` : null}
         title="The forecast advisory (TCM) in force at the capture's newest instant, and when the capture first saw it."
         value={`#${fc.advisory} · issued ${fmtUTC(fc.issued)} · ${fc.points} forecast points`} />
-      <Reading label="GUIDANCE" qualifier={g.missing.length ? `MISSING ${g.missing.join(", ")}` : "ALL FAMILIES"}
-        dim={g.runs === 0}
-        title="Family runs from the newest early-guidance cycle the capture had first seen. An absent family stays absent: an older cycle is never substituted."
-        value={`${g.runs} of ${g.families} families · ${cyc} cycle · ${Number.isFinite(g.ageH) ? `${g.ageH} h` : "—"} old at capture`} />
+      {g ? (
+        <Reading label="GUIDANCE" qualifier={g.missing.length ? `MISSING ${g.missing.join(", ")}` : "ALL FAMILIES"}
+          dim={g.runs === 0}
+          title="Family runs from the newest early-guidance cycle the capture had first seen. An absent family stays absent: an older cycle is never substituted."
+          value={`${g.runs} of ${g.families} families · ${cyc} cycle · ${Number.isFinite(g.ageH) ? `${g.ageH} h` : "—"} old at capture`} />
+      ) : (
+        <Reading label="GUIDANCE" qualifier="WITHHELD" dim hook="data-live-guidance-withheld"
+          title="Model guidance is not published in this feed until its outside use is cleared."
+          value="Model guidance is not shown in this public feed" />
+      )}
       <Reading label="CONE" dim
         value={fc.cone ? `${fc.cone.kind === "OFFICIAL_GIS" ? "NHC's own GIS polygon" : fc.cone.kind} · adv ${fc.cone.advisory}${fc.cone.matches === false ? " · NOT THIS ADVISORY" : ""}` : "none on file"} />
 
       <div className="at-live-fc-h at-live-fc-wh"><span>DISAGREEMENT WATCH</span>
-        <em>{w ? `${w.engine} · as of ${fmtUTC(w.asOf)}` : "—"}</em></div>
-      {!fc.watchSupplied ? (
+        <em>{w && Number.isFinite(w.asOf) ? `${w.engine} · as of ${fmtUTC(w.asOf)}` : "—"}</em></div>
+      {fc.watchWithheld ? (
+        <Note hook="data-live-watch-withheld"><b>WATCH VERDICTS ARE WITHHELD.</b> They are computed from
+          model guidance that is not cleared for outside display. No verdict is shown, which is not the same as quiet.</Note>
+      ) : !fc.watchSupplied ? (
         <Note hook="data-live-watch-absent"><b>THE WATCH WAS NOT SUPPLIED TO THIS FEED.</b> No verdict
           is shown, which is not the same as quiet.</Note>
       ) : !w ? (
@@ -153,9 +162,9 @@ function ForecastNow({ fc }) {
  * KEYED HERE / NOT USED FOR MATCHING -- travels with the label rather than being a tooltip,
  * because which of the two points the population is keyed to is the entire point of the block.
  */
-function Reading({ label, qualifier, value, derived, dim, title }) {
+function Reading({ label, qualifier, value, derived, dim, title, hook }) {
   return (
-    <div className={dim ? "at-live-rd at-live-rd-dim" : "at-live-rd"} title={title}>
+    <div className={dim ? "at-live-rd at-live-rd-dim" : "at-live-rd"} title={title} {...(hook ? { [hook]: "" } : {})}>
       <div className="at-live-rd-k">
         <span>{label}{derived ? <Drv title={derived} /> : null}</span>
         {qualifier ? <em>{qualifier}</em> : null}

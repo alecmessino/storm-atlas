@@ -2,10 +2,12 @@
 /* Tests for the ATCF deck parsers — the highest-value feed on the board and the one
  * whose failure modes are silent.
  *
- * Every fixture here is a real record shape taken from live decks (acp012026,
- * aal942026, fcp012026, 14 Aug 2026), not an invented one. That matters: the two traps
- * these parsers exist to avoid are both things the live data actually does, and a
- * made-up fixture would not contain either.
+ * Every fixture here keeps a real record shape taken from live decks (acp012026,
+ * aal942026, fcp012026, 14 Aug 2026). That matters: the two traps these parsers exist to
+ * avoid are both things the live data actually does. The a-deck block in [2]-[4] is
+ * SYNTHETIC since 12 Oct 2026: its positions and intensities are invented, written in those
+ * real shapes so that both traps are present by construction (HCCA on three radius rows,
+ * TVCN at vmax 0, IVCN with a missing position). No model's real forecast is in it.
  *
  *   1. TVCN, the track consensus, ships vmax=0 on every row because it has no intensity
  *      to give. Read as a forecast, that is a consensus predicting the storm dissipates
@@ -38,34 +40,34 @@ console.log("\n[2] the a-deck, including both traps");
 /* Two cycles, so "latest" has to be chosen rather than assumed. HCCA appears three times
    at tau 24 — once per radius threshold — and TVCN carries vmax 0 throughout. */
 const ADECK = `
-CP, 01, 2026081412, 03, HCCA,   0, 170N, 1503W,  50,  997,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081412, 03, HCCA,  24, 184N, 1546W,  60,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, CARQ, -24, 150N, 1440W,  40,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, CARQ,   0, 170N, 1503W,  50,  997,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, HCCA,   0, 170N, 1503W,  50,  997, TS,  34, NEQ,  180,    0,    0,  120,
-CP, 01, 2026081418, 03, HCCA,  24, 184N, 1546W,  74,    0, HU,  34, NEQ,   60,   60,   40,   40,
-CP, 01, 2026081418, 03, HCCA,  24, 184N, 1546W,  74,    0, HU,  50, NEQ,   30,   30,   20,   20,
-CP, 01, 2026081418, 03, HCCA,  24, 184N, 1546W,  74,    0, HU,  64, NEQ,   15,   15,   10,   10,
-CP, 01, 2026081418, 03, HCCA, 120, 226N, 1718W, 104,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, IVCN,   0, 170N, 1503W,  50,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, IVCN, 120,    0,     0,  79,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, GDMI,   0, 170N, 1503W,  50,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, GDMI, 120, 224N, 1710W,  83,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, TVCN,   0, 170N, 1503W,   0,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, TVCN, 120, 226N, 1718W,   0,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, OFCL,   0, 170N, 1503W,  50,    0,   ,   0,    ,    0,    0,    0,    0,
-CP, 01, 2026081418, 03, OFCL, 120, 226N, 1718W,  70,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081412, 03, HCCA,   0, 181N, 1486W,  45,  998,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081412, 03, HCCA,  24, 193N, 1531W,  58,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, CARQ, -24, 162N, 1427W,  35,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, CARQ,   0, 184N, 1492W,  45,  998,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, HCCA,   0, 184N, 1492W,  45,  998, TS,  34, NEQ,  150,    0,    0,  100,
+CP, 01, 2026081418, 03, HCCA,  24, 197N, 1538W,  71,    0, HU,  34, NEQ,   70,   70,   50,   50,
+CP, 01, 2026081418, 03, HCCA,  24, 197N, 1538W,  71,    0, HU,  50, NEQ,   35,   35,   25,   25,
+CP, 01, 2026081418, 03, HCCA,  24, 197N, 1538W,  71,    0, HU,  64, NEQ,   20,   20,   10,   10,
+CP, 01, 2026081418, 03, HCCA, 120, 238N, 1702W, 101,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, IVCN,   0, 184N, 1492W,  45,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, IVCN, 120,    0,     0,  77,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, GDMI,   0, 184N, 1492W,  45,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, GDMI, 120, 233N, 1694W,  88,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, TVCN,   0, 184N, 1492W,   0,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, TVCN, 120, 236N, 1699W,   0,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, OFCL,   0, 184N, 1492W,  45,    0,   ,   0,    ,    0,    0,    0,    0,
+CP, 01, 2026081418, 03, OFCL, 120, 235N, 1700W,  65,    0,   ,   0,    ,    0,    0,    0,    0,
 `;
 const A = parseAdeck(ADECK);
 eq("it parses", A.ok, true);
 eq("the latest cycle is chosen, not the first seen", A.latestCycle, "2026081418");
 eq("and dated", A.cycleIso, "2026-08-14T18:00:00.000Z");
 eq("the earlier cycle's rows are not in the working set",
-   A.rows.filter((r) => r.tech === "HCCA" && r.tau === 24 && r.vmax === 60).length, 0);
+   A.rows.filter((r) => r.tech === "HCCA" && r.tau === 24 && r.vmax === 58).length, 0);
 /* TRAP 2: three rows, one forecast. */
 eq("one forecast per (tech, tau) after the radii rows merge",
    A.rows.filter((r) => r.tech === "HCCA" && r.tau === 24).length, 1);
-eq("and it keeps the intensity", A.rows.find((r) => r.tech === "HCCA" && r.tau === 24).vmax, 74);
+eq("and it keeps the intensity", A.rows.find((r) => r.tech === "HCCA" && r.tau === 24).vmax, 71);
 /* TRAP 1: a zero is missing, not a forecast of calm. */
 eq("a track aid's zero intensity is absent, not zero",
    A.rows.filter((r) => r.tech === "TVCN").every((r) => r.vmax === null), true);
@@ -82,9 +84,9 @@ eq("three aids vote", C.n, 3);
 /* The peak is the mean of the members' peaks, not the peak of an averaged curve: the
    contract asks whether the storm EVER reaches a threshold, so each member answers that
    question on its own and the answers are averaged. */
-eq("the consensus peak is the mean of the members' peaks", C.peakKt, Math.round(((104 + 79 + 83) / 3) * 10) / 10);
+eq("the consensus peak is the mean of the members' peaks", C.peakKt, Math.round(((101 + 77 + 88) / 3) * 10) / 10);
 ck("and the disagreement is measured, not assumed", C.spreadKt > 10, String(C.spreadKt));
-eq("the range is carried too", [C.minKt, C.maxKt], [79, 104]);
+eq("the range is carried too", [C.minKt, C.maxKt], [77, 101]);
 /* A track aid must never be counted as an intensity member — that is trap 1 arriving by
    a different door. */
 eq("the track consensus does NOT vote on intensity", C.members.some((m) => m.tech === "TVCN"), false);

@@ -69,7 +69,7 @@ export const SCHEMAS = {
   "atlas-forecast-v1.json": {
     schema: "*", generated_at: "*",
     source: { name: "*", kind: "*", note: "*" },
-    watch: { supplied: "*", engine: "*" },
+    watch: { supplied: "*", engine: "*", withheld: "*" },
     storms: { $map: ATCF, $of: FORECAST },
   },
   "latest.json": {
@@ -126,7 +126,7 @@ function forecastRules(obj, errs) {
     }
     for (const [i, r] of ((s.watch && s.watch.rows) || []).entries()) {
       if (r.provenance_kind !== "PUBLIC") errs.push(`$.storms.${id}.watch.rows[${i}]: exposure is not PUBLIC`);
-      if (!(Date.parse(r.known_at) <= T)) errs.push(`$.storms.${id}.watch.rows[${i}].known_at: after generated_at`);
+      if (r.known_at != null && !(Date.parse(r.known_at) <= T)) errs.push(`$.storms.${id}.watch.rows[${i}].known_at: after generated_at`);
     }
   }
 }
@@ -141,9 +141,15 @@ function selfTest() {
   const live = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-live-v1.json"), "utf8"));
   const off = JSON.parse(readFileSync(resolve(ROOT, "docs/data/latest.json"), "utf8"));
   const id = Object.keys(live.storms)[0];
-  const fc = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-forecast-v1.json"), "utf8"));
-  const fid = Object.keys(fc.storms).find((k) => fc.storms[k].ok && fc.storms[k].watch && fc.storms[k].watch.rows.length);
+  /* The forecast mutations need a storm with watch rows. The published file withholds watch verdicts (12 Oct 2026),
+     so they run on the synthetic feed fixture; the published file is still checked as-is ("forecast (published): clean"). */
   const mut = (o, f) => { const c = structuredClone(o); f(c); return c; };
+  const fcLive = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-forecast-v1.json"), "utf8"));
+  const hasRows = (f) => Object.values(f.storms || {}).some((s) => s && s.ok && s.watch && s.watch.rows && s.watch.rows.length);
+  const fc = hasRows(fcLive) ? fcLive : JSON.parse(readFileSync(resolve(ROOT, "scripts/fixtures/atlas-feed/atlas-forecast-20261001T0108Z.json"), "utf8"));
+  const fid = Object.keys(fc.storms).find((k) => fc.storms[k].ok && fc.storms[k].watch && fc.storms[k].watch.rows.length);
+  const withheld = mut(fc, (c) => { c.watch = { supplied: true, engine: c.watch.engine, withheld: true };
+    for (const s of Object.values(c.storms)) if (s.ok) Object.assign(s, { known_at: null, guidance: null, watch: null, source: { ...s.source, first_seen: null } }); });
   const cases = [
     ["live: clean", "atlas-live-v1.json", live, 0],
     ["official: clean", "latest.json", off, 0],
@@ -157,7 +163,9 @@ function selfTest() {
     ["live: email in a note", "atlas-live-v1.json", mut(live, (c) => { c.source.note = "ask someone@example.invalid"; }), 1],
     ["live: repo link in a url", "atlas-live-v1.json", mut(live, (c) => { c.source.url = "https://github.com/alecmessino/category-alpha"; }), 1],
     ["live: internal route", "atlas-live-v1.json", mut(live, (c) => { c.source.note = "see /briefs/ledger"; }), 1],
+    ["forecast (published): clean", "atlas-forecast-v1.json", fcLive, 0],
     ["forecast: clean", "atlas-forecast-v1.json", fc, 0],
+    ["forecast: guidance, verdicts and capture times withheld", "atlas-forecast-v1.json", withheld, 0],
     ["forecast: a non-PUBLIC watch row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].provenance_kind = "SYNTHETIC"; }), 1],
     ["forecast: a packet id on a row", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch.rows[0].packet_id = "f"; }), 1],
     ["forecast: a capture run id", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.capture_run = "x"; }), 1],

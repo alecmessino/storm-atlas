@@ -97,6 +97,12 @@ async function main() {
     let prevLive = null;
     try { prevLive = JSON.parse(await readFile(resolve(DATA_DIR, LIVE_FILE), "utf8")); } catch { /* first run */ }
     const live = buildAtlasLive({ storms, intel, nowMs: now.getTime(), previous: prevLive });
+    /* SHIPS IS WITHHELD FROM THE PUBLIC FILE (12 Oct 2026). Operational SHIPS and LGEM are model guidance whose
+       outside display is not yet cleared, so every record, retained ones included, publishes ships_rt as null.
+       The record is built exactly as before (the panel's tests still exercise it); only publication is cut. */
+    for (const r of Object.values(live.storms || {})) if (r) r.ships_rt = null;
+    if (live.source && typeof live.source.note === "string")
+      live.source.note += " Operational SHIPS is withheld from this public file pending outside-use clearance.";
     await writeFile(resolve(DATA_DIR, LIVE_FILE), JSON.stringify(live) + "\n");
     console.log(`  atlas-live: ${live.health.note}`
       + (live.health.stale_atcf_ids.length ? ` · STALE ${live.health.stale_atcf_ids.join(",")}` : ""));
