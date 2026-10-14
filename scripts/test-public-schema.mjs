@@ -116,8 +116,9 @@ export function check(obj, spec, path = "$", errs = []) {
   return errs;
 }
 
-/* Value rules the shape cannot express. The forecast file is an as-of record: no advisory in it was
-   issued after its own instant. And it is the PUBLIC CUT: capture instants (known_at,
+/* Value rules the shape cannot express. Each advisory's issue stamp is an instant and is its own tau-0
+   point (NHC stamps an advisory with its synoptic time and releases it up to about 15 min before that, so
+   the stamp is NOT bounded by generated_at). And the file is the PUBLIC CUT: capture instants (known_at,
    source.first_seen), guidance and watch verdicts are withheld, so each must be null and the file must
    say so (watch.withheld). Putting any of them back is a publication decision, made here in review. */
 function forecastRules(obj, errs) {
@@ -126,7 +127,9 @@ function forecastRules(obj, errs) {
   if (!(obj.watch && obj.watch.withheld === true)) errs.push("$.watch.withheld: watch verdicts not marked withheld");
   for (const [id, s] of Object.entries(obj.storms || {})) {
     if (!s || !s.ok) continue;
-    if (!(Date.parse(s.issued) <= T)) errs.push(`$.storms.${id}.issued: not an instant at or before generated_at`);
+    const p0 = (s.trackPoints || [])[0];
+    if (!Number.isFinite(Date.parse(s.issued))) errs.push(`$.storms.${id}.issued: not an instant`);
+    else if (!p0 || Date.parse(p0.validZ) !== Date.parse(s.issued)) errs.push(`$.storms.${id}.issued: not the advisory's own first point`);
     for (const [k, v] of [["known_at", s.known_at], ["source.first_seen", s.source && s.source.first_seen],
       ["guidance", s.guidance], ["watch", s.watch]]) {
       if (v != null) errs.push(`$.storms.${id}.${k}: withheld from the public cut, but carries a value`);
@@ -174,7 +177,9 @@ function selfTest() {
     ["forecast: guidance put back", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].guidance = full.storms[fid].guidance; }), 1],
     ["forecast: a watch verdict put back", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].watch = full.storms[fid].watch; }), 1],
     ["forecast: watch not marked withheld", "atlas-forecast-v1.json", mut(fc, (c) => { c.watch.withheld = false; }), 1],
-    ["forecast: an advisory issued after the file", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].issued = "2999-01-01T00:00:00Z"; }), 1],
+    ["forecast: an advisory released before its synoptic time (issued after the file)", "atlas-forecast-v1.json", mut(fc, (c) => { const T = Date.parse(c.generated_at) + 15 * 60000; for (const s of Object.values(c.storms)) if (s.ok) { s.issued = new Date(T).toISOString(); s.trackPoints[0].validZ = s.issued; } }), 0],
+    ["forecast: issued is not an instant", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].issued = "soon"; }), 1],
+    ["forecast: issued is not the advisory's own first point", "atlas-forecast-v1.json", mut(fc, (c) => { c.storms[fid].issued = "2026-09-30T15:00:00.000Z"; }), 1],
     ["forecast: generated_at not an instant", "atlas-forecast-v1.json", mut(fc, (c) => { c.generated_at = null; }), 1],
     ["forecast: a capture run id", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.capture_run = "x"; }), 1],
     ["forecast: a filesystem path in a note", "atlas-forecast-v1.json", mut(fc, (c) => { c.source.note = "/home/user/x"; }), 1],

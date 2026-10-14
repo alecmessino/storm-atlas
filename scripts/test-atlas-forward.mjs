@@ -301,11 +301,14 @@ console.log("\n[8] the SHIPPED payloads still have the shape the view reads");
      the capture feed, so the two stamps differ by design. THE PUBLIC CUT (12 Oct 2026) withholds the
      capture's observation times, guidance and watch verdicts: generated_at is the file's build time
      and known_at / source.first_seen are null. The first-seen as-of rule is enforced on the full
-     feed, privately, before the cut; what this file can still be held to is that no advisory in it
-     was issued after the file was built, and that no capture instant has come back. */
+     feed, privately, before the cut. What this file can still be held to: each advisory's issue stamp
+     is its own tau-0 point (NHC releases an advisory up to about 15 min before that synoptic time, so
+     the stamp is not bounded by generated_at), and no capture instant has come back. */
   const fcT = Date.parse(fc.generated_at);
-  ok("its generated_at is an instant, and no advisory in it was issued after that instant",
-    Number.isFinite(fcT) && Object.values(fc.storms).every((s) => !s.ok || Date.parse(s.issued) <= fcT),
+  ok("its generated_at is an instant, and each advisory's issue stamp is its own first point",
+    Number.isFinite(fcT) && Object.values(fc.storms).every((s) => !s.ok
+      || (Number.isFinite(Date.parse(s.issued)) && s.trackPoints && s.trackPoints.length
+        && Date.parse(s.trackPoints[0].validZ) === Date.parse(s.issued))),
     fc.generated_at);
   ok("capture instants, guidance and watch verdicts are withheld, not carried",
     fc.watch && fc.watch.withheld === true && Object.values(fc.storms).every((s) => !s.ok
