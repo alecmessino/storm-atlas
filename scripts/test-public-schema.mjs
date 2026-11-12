@@ -145,7 +145,11 @@ function checkFile(name, obj) {
 
 function selfTest() {
   const live = JSON.parse(readFileSync(resolve(ROOT, "docs/data/atlas-live-v1.json"), "utf8"));
-  const off = JSON.parse(readFileSync(resolve(ROOT, "docs/data/latest.json"), "utf8"));
+  const offPublished = JSON.parse(readFileSync(resolve(ROOT, "docs/data/latest.json"), "utf8"));
+  /* The official mutations need a storm to mutate. Off-season the published file holds none, so they
+     run on a producer-cut sample instead; the published file is still checked as-is ("official: clean"). */
+  const off = offPublished.storms.length ? offPublished : officialPayload([{ id: "EP172026", name: "POLO",
+    trackPoints: [{ at: [1, 2], hr: 0, validZ: "2026-09-23T18:00:00.000Z", kt: 125, gustKt: 150 }] }], offPublished.generatedAt);
   const id = Object.keys(live.storms)[0];
   /* The forecast mutations run on the synthetic feed fixture cut the way the producer cuts it, so they
      hold whatever storms are active; the published file is still checked as-is. The uncut fixture is
@@ -158,7 +162,8 @@ function selfTest() {
     for (const s of Object.values(c.storms)) if (s.ok) Object.assign(s, { known_at: null, guidance: null, watch: null, source: { ...s.source, first_seen: null } }); });
   const cases = [
     ["live: clean", "atlas-live-v1.json", live, 0],
-    ["official: clean", "latest.json", off, 0],
+    ["official: clean (published)", "latest.json", offPublished, 0],
+    ["official: clean (mutation base)", "latest.json", off, 0],
     ["official: top-level contracts", "latest.json", mut(off, (c) => { c.contracts = []; }), 1],
     ["official: extra storm field (cone)", "latest.json", mut(off, (c) => { c.storms[0].cone = [[1, 2]]; }), 1],
     ["official: marketCat4 on a storm", "latest.json", mut(off, (c) => { c.storms[0].marketCat4 = 0.4; }), 1],
