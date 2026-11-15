@@ -224,7 +224,9 @@ const { compareResults } = await import("../docs/storm-atlas/src/engine/compare.
 const { envAtGenesis, envCoverage } = await import("../docs/storm-atlas/src/engine/env.js");
 const { buildTimeline } = await import("../docs/storm-atlas/src/engine/timeline.js");
 const { bridgeSpec, contributionOf, whyMatched } = await import("../docs/storm-atlas/src/engine/cohort-membership.js");
-const { liveStateFor, LIVE_OPERATIONAL } = await import("../docs/storm-atlas/src/engine/live.js");
+const { Live, liveStateFor, LIVE_OPERATIONAL } = await import("../docs/storm-atlas/src/engine/live.js");
+const { parseBestTrack } = await import("./lib/atcf.mjs");
+const { buildAtlasLive } = await import("./lib/atlas-live.mjs");
 
 /* THE SPECS. One is the whole archive; the rest exercise the paths that carry a refusal, a
    sample gate, a landfall rate and a Hawaii cohort -- the shapes a leak would show up in. */
@@ -296,7 +298,33 @@ function stormSnapshot(archive, row) {
      by carrying it into both snapshots. These are separate decodes of the same bytes. */
   const before = await openArchive(DATA);
   const after = await openArchive(DATA);
-  const live = await openLive(DATA);
+  /* WHICH OPERATIONAL LAYER TO LOAD. The committed file when it governs a storm. Off-season it
+     governs none, and a wall tested against an empty layer proves nothing -- so the same join is
+     run against the pinned CP012026 b-deck fixture (the one test-atlas-live.mjs proves the contract
+     on) instead of failing for want of a storm. In season the committed file is used as before. */
+  const committed = await openLive(DATA);
+  let live = committed;
+  let liveSource = "the committed live file";
+  let committedGoverned = 0;
+  for (let i = 0; i < after.nStorms; i++) {
+    if (liveStateFor(after, i, committed).state === LIVE_OPERATIONAL) committedGoverned++;
+  }
+  if (committed.ok && committedGoverned === 0) {
+    const deckText = await readFile(join(ROOT, "scripts/fixtures/bdeck-cp012026.dat"), "utf8");
+    const deck = parseBestTrack(deckText);
+    live = new Live(buildAtlasLive({
+      storms: [{ id: "CP012026", name: "Lala" }],
+      intel: { byStorm: { CP012026: {
+        bestTrackHistory: deck.records,
+        ships: null,
+        bestTrackSource: { url: "fixture://bdeck-cp012026.dat", status: 200, bytes: deckText.length },
+      } } },
+      nowMs: Date.parse("2026-08-25T15:43:45.983Z"),
+      previous: null,
+    }), null);
+    liveSource = "the pinned CP012026 fixture (the committed file governs no storm: off-season)";
+  }
+  console.log(`  note  operational layer under test: ${liveSource}`);
 
   const baseline = SPECS.map((s) => snapshot(before, s));
 
